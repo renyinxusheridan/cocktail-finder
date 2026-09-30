@@ -85,8 +85,9 @@ form.addEventListener('submit', async (event) => {
 
     try {
        
-        const url = new URL('https://www.thecocktaildb.com/api/json/v1/1/search.php');
-        url.searchParams.set('s', query);
+        // Ask our backend to look up the cocktail.
+        const url = new URL('/api/cocktails', window.location.origin);
+        url.searchParams.set('name', query);
         const response = await fetch(url, { signal: controller.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
