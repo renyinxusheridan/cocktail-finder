@@ -3,6 +3,9 @@ const input = document.querySelector('#cocktail-name');
 const status = document.querySelector('#status');
 const results = document.querySelector('#results');
 const resultsSection = document.querySelector('#results-section');
+const recipeDialog = document.querySelector('#recipe-dialog');
+const recipeDetails = document.querySelector('#recipe-details');
+const closeRecipe = document.querySelector('.dialog-close');
 let activeController;
 let latestRequest = 0;
 
@@ -23,9 +26,8 @@ function setStatus(message, state = '') {
     status.dataset.state = state;
 }
 
-function createRecipe(drink) {
+function createDrinkImage(drink) {
     const name = cleanText(drink.strDrink) || 'Unnamed cocktail';
-    const card = makeElement('article', '', 'recipe');
     const fallback = makeElement('p', 'Image unavailable', 'image-fallback');
     const imageUrl = cleanText(drink.strDrinkThumb);
     if (imageUrl && /^https:\/\//i.test(imageUrl)) {
@@ -36,12 +38,26 @@ function createRecipe(drink) {
         image.height = 300;
         image.addEventListener('error', () => image.replaceWith(fallback), { once: true });
         image.src = imageUrl;
-        card.append(image);
-    } else {
-        card.append(fallback);
+        return image;
     }
+    return fallback;
+}
 
+function createRecipe(drink) {
+    const name = cleanText(drink.strDrink) || 'Unnamed cocktail';
+    const card = makeElement('button', '', 'recipe');
+    card.type = 'button';
+    card.setAttribute('aria-haspopup', 'dialog');
+    card.append(createDrinkImage(drink), makeElement('span', name, 'recipe-name'));
+    card.addEventListener('click', () => openRecipe(drink));
+    return card;
+}
+
+function openRecipe(drink) {
+    const name = cleanText(drink.strDrink) || 'Unnamed cocktail';
     const body = makeElement('div', '', 'recipe-body');
+    const title = makeElement('h2', name);
+    title.id = 'recipe-title';
     const ingredients = makeElement('ul');
     
     for (let i = 1; i <= 15; i++) {
@@ -51,15 +67,29 @@ function createRecipe(drink) {
             ingredients.append(makeElement('li', measure ? `${measure} — ${ingredient}` : ingredient));
         }
     }
-    body.append(makeElement('h3', name), makeElement('h4', 'Ingredients'));
+    body.append(title, makeElement('h3', 'Ingredients'));
     body.append(ingredients.children.length ? ingredients : makeElement('p', 'Ingredients unavailable.'));
     body.append(
-        makeElement('h4', 'Instructions'),
+        makeElement('h3', 'Instructions'),
         makeElement('p', cleanText(drink.strInstructions) || 'English instructions unavailable.', 'instructions')
     );
-    card.append(body);
-    return card;
+    recipeDetails.replaceChildren(createDrinkImage(drink), body);
+    recipeDialog.showModal();
+    document.body.classList.add('recipe-open');
 }
+
+closeRecipe.addEventListener('click', () => recipeDialog.close());
+recipeDialog.addEventListener('close', () => {
+    document.body.classList.remove('recipe-open');
+});
+recipeDialog.addEventListener('click', (event) => {
+    const bounds = recipeDialog.getBoundingClientRect();
+    if (event.target === recipeDialog &&
+        (event.clientX < bounds.left || event.clientX > bounds.right ||
+         event.clientY < bounds.top || event.clientY > bounds.bottom)) {
+        recipeDialog.close();
+    }
+});
 
 form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -85,9 +115,13 @@ form.addEventListener('submit', async (event) => {
 
     try {
        
-        // Ask our backend to look up the cocktail.
-        const url = new URL('/api/cocktails', window.location.origin);
-        url.searchParams.set('name', query);
+        // Static local previews cannot run the Vercel API function.
+        const isLocalPreview = window.location.protocol === 'file:' ||
+            ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
+        const url = isLocalPreview
+            ? new URL('https://www.thecocktaildb.com/api/json/v1/1/search.php')
+            : new URL('/api/cocktails', window.location.origin);
+        url.searchParams.set(isLocalPreview ? 's' : 'name', query);
         const response = await fetch(url, { signal: controller.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
