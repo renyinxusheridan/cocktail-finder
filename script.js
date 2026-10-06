@@ -103,8 +103,15 @@ function resetComparison() {
 function createComparisonCard(drink) {
     const card = makeElement('article', '', 'comparison-card');
     const body = makeElement('div', '', 'recipe-body');
+    const heading = makeElement('h5');
+    const openButton = makeElement('button', cleanText(drink.strDrink) || 'Unnamed cocktail', 'comparison-open');
+    openButton.type = 'button';
+    openButton.setAttribute('aria-haspopup', 'dialog');
+    openButton.setAttribute('aria-controls', 'recipe-dialog');
+    openButton.addEventListener('click', () => openRecipe(drink));
+    heading.append(openButton);
     body.append(
-        makeElement('h5', cleanText(drink.strDrink) || 'Unnamed cocktail'),
+        heading,
         makeElement('p', `Missing ingredients: ${drink.missingCount}`)
     );
     if (drink.missingCount) {
