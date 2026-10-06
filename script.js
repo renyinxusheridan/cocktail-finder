@@ -104,7 +104,7 @@ function createComparisonCard(drink) {
     const card = makeElement('article', '', 'comparison-card');
     const body = makeElement('div', '', 'recipe-body');
     body.append(
-        makeElement('h4', cleanText(drink.strDrink) || 'Unnamed cocktail'),
+        makeElement('h5', cleanText(drink.strDrink) || 'Unnamed cocktail'),
         makeElement('p', `Missing ingredients: ${drink.missingCount}`)
     );
     if (drink.missingCount) {
@@ -118,6 +118,38 @@ function createComparisonCard(drink) {
     }
     card.append(createDrinkImage(drink), body);
     return card;
+}
+
+function renderComparisonGroups(comparisons) {
+    const groups = [
+        { title: 'Can Make Now', drinks: [] },
+        { title: 'One Ingredient Away', drinks: [] },
+        { title: 'Two Ingredients Away', drinks: [] },
+        { title: 'More Ingredients Needed', drinks: [] }
+    ];
+    // Input is already sorted; appending preserves that order within each group.
+    for (const drink of comparisons) {
+        groups[Math.min(drink.missingCount, 3)].drinks.push(drink);
+    }
+
+    const fragment = document.createDocumentFragment();
+    groups.forEach((group, index) => {
+        const section = makeElement('section', '', 'comparison-group');
+        const count = group.drinks.length;
+        const heading = makeElement('h4', `${group.title} — ${count} ${count === 1 ? 'cocktail' : 'cocktails'}`);
+        heading.id = `comparison-group-${index}-heading`;
+        section.setAttribute('aria-labelledby', heading.id);
+        section.append(heading);
+        if (count) {
+            const grid = makeElement('div', '', 'results-grid');
+            for (const drink of group.drinks) grid.append(createComparisonCard(drink));
+            section.append(grid);
+        } else {
+            section.append(makeElement('p', 'No cocktails in this group.', 'hint'));
+        }
+        fragment.append(section);
+    });
+    comparisonResults.replaceChildren(fragment);
 }
 
 findCocktails.addEventListener('click', async () => {
@@ -148,6 +180,7 @@ findCocktails.addEventListener('click', async () => {
         }
         const drinks = data.drinks || [];
         if (!drinks.length) {
+            renderComparisonGroups([]);
             setComparisonStatus('No recipes were returned for the S-name recipe sample. Please try again.');
             return;
         }
@@ -158,9 +191,7 @@ findCocktails.addEventListener('click', async () => {
             .map(drink => compareRecipeIngredients(drink, selectedIngredients))
             .sort((a, b) => a.missingCount - b.missingCount ||
                 cleanText(a.strDrink).localeCompare(cleanText(b.strDrink)));
-        const fragment = document.createDocumentFragment();
-        for (const drink of comparisons) fragment.append(createComparisonCard(drink));
-        comparisonResults.replaceChildren(fragment);
+        renderComparisonGroups(comparisons);
         setComparisonStatus(`Compared ${comparisons.length} ${comparisons.length === 1 ? 'recipe' : 'recipes'} from the S-name recipe sample, sorted by fewest missing ingredients.`);
     } catch (error) {
         if (requestId !== latestComparisonRequest) return;
