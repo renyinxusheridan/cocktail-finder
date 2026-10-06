@@ -34,6 +34,27 @@
             <h2 id="results-heading">Recipes</h2>
             <div id="results" class="results-grid"></div>
         </section>
+        <section class="ingredient-section" aria-labelledby="ingredients-heading">
+            <h2 id="ingredients-heading">Find Cocktails by Ingredients</h2>
+            <form id="ingredient-form" novalidate>
+                <label for="ingredient-name">Ingredient</label>
+                <div class="search-row">
+                    <input id="ingredient-name" name="ingredient" type="text"
+                        placeholder="e.g. Lime juice" aria-describedby="ingredient-hint ingredient-status" required>
+                    <button type="submit">Add</button>
+                </div>
+                <p id="ingredient-hint" class="hint">Add one ingredient at a time using Enter or the Add button.</p>
+                <p id="ingredient-status" class="hint" role="status" aria-live="polite" aria-atomic="true"></p>
+                <ul id="ingredient-list" class="ingredient-list" aria-label="Added ingredients" role="list"></ul>
+                <button id="find-cocktails" type="button" aria-describedby="ingredient-search-hint">Find Cocktails</button>
+                <p id="ingredient-search-hint" class="hint">Compare your added ingredients with the S-name recipe sample only. Ingredient names must match exactly, ignoring capitalization and extra spaces.</p>
+            </form>
+            <p id="comparison-status" role="status" aria-live="polite" aria-atomic="true">Add ingredients, then select Find Cocktails to compare the S-name recipe sample.</p>
+            <section id="comparison-section" aria-labelledby="comparison-heading" aria-busy="false">
+                <h3 id="comparison-heading">Results from the S-name recipe sample</h3>
+                <div id="comparison-results" class="results-grid"></div>
+            </section>
+        </section>
         <noscript>Please enable JavaScript to search for cocktail recipes.</noscript>
         <footer>Recipe data and images from <a href="https://www.thecocktaildb.com/">TheCocktailDB</a>.</footer>
     </main>

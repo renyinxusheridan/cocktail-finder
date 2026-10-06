@@ -9,9 +9,173 @@ const closeRecipe = document.querySelector('.dialog-close');
 let activeController;
 let latestRequest = 0;
 
+const ingredientForm = document.querySelector('#ingredient-form');
+const ingredientInput = document.querySelector('#ingredient-name');
+const ingredientList = document.querySelector('#ingredient-list');
+const ingredientStatus = document.querySelector('#ingredient-status');
+const addedIngredients = new Set();
+const findCocktails = document.querySelector('#find-cocktails');
+const comparisonStatus = document.querySelector('#comparison-status');
+const comparisonSection = document.querySelector('#comparison-section');
+const comparisonResults = document.querySelector('#comparison-results');
+let comparisonController;
+let latestComparisonRequest = 0;
+
+ingredientForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const ingredient = ingredientInput.value.trim().replace(/\s+/g, ' ');
+    const key = normalizeIngredient(ingredient);
+
+    if (!ingredient || addedIngredients.has(key)) {
+        ingredientInput.setAttribute('aria-invalid', 'true');
+        ingredientStatus.dataset.state = 'error';
+        ingredientStatus.textContent = !ingredient
+            ? 'Please enter an ingredient.'
+            : `${ingredient} is already added.`;
+        ingredientInput.focus();
+        return;
+    }
+
+    addedIngredients.add(key);
+    resetComparison();
+    const chip = makeElement('li', '', 'ingredient-chip');
+    const removeButton = makeElement('button', '×', 'ingredient-remove');
+    removeButton.type = 'button';
+    removeButton.setAttribute('aria-label', `Remove ${ingredient}`);
+    removeButton.addEventListener('click', () => {
+        addedIngredients.delete(key);
+        resetComparison();
+        chip.remove();
+        ingredientStatus.dataset.state = '';
+        ingredientStatus.textContent = `${ingredient} removed.`;
+        ingredientInput.removeAttribute('aria-invalid');
+        ingredientInput.focus();
+    });
+    chip.append(makeElement('span', ingredient), removeButton);
+    ingredientList.append(chip);
+    ingredientInput.value = '';
+    ingredientInput.removeAttribute('aria-invalid');
+    ingredientStatus.dataset.state = '';
+    ingredientStatus.textContent = `${ingredient} added.`;
+    ingredientInput.focus();
+});
+
+ingredientInput.addEventListener('input', () => {
+    ingredientInput.removeAttribute('aria-invalid');
+    ingredientStatus.dataset.state = '';
+    ingredientStatus.textContent = '';
+});
+
 function cleanText(value) {
     return typeof value === 'string' ? value.trim() : '';
 }
+
+function normalizeIngredient(value) {
+    return cleanText(value).replace(/\s+/g, ' ').toLowerCase();
+}
+
+function compareRecipeIngredients(drink, selectedIngredients) {
+    const recipeIngredients = new Set();
+    for (let i = 1; i <= 15; i++) {
+        const ingredient = normalizeIngredient(drink[`strIngredient${i}`]);
+        if (ingredient) recipeIngredients.add(ingredient);
+    }
+    const missingIngredients = [...recipeIngredients].filter(ingredient => !selectedIngredients.has(ingredient));
+    return { ...drink, missingIngredients, missingCount: missingIngredients.length };
+}
+
+function setComparisonStatus(message, state = '') {
+    comparisonStatus.textContent = message;
+    comparisonStatus.dataset.state = state;
+}
+
+function resetComparison() {
+    // Ingredient changes invalidate both displayed results and any pending request.
+    latestComparisonRequest++;
+    if (comparisonController) comparisonController.abort();
+    comparisonController = null;
+    comparisonResults.replaceChildren();
+    comparisonSection.setAttribute('aria-busy', 'false');
+    findCocktails.disabled = false;
+    setComparisonStatus('Ingredients changed. Select Find Cocktails to compare the S-name recipe sample.');
+}
+
+function createComparisonCard(drink) {
+    const card = makeElement('article', '', 'comparison-card');
+    const body = makeElement('div', '', 'recipe-body');
+    body.append(
+        makeElement('h4', cleanText(drink.strDrink) || 'Unnamed cocktail'),
+        makeElement('p', `Missing ingredients: ${drink.missingCount}`)
+    );
+    if (drink.missingCount) {
+        const missingList = makeElement('ul');
+        for (const ingredient of drink.missingIngredients) {
+            missingList.append(makeElement('li', ingredient));
+        }
+        body.append(missingList);
+    } else {
+        body.append(makeElement('p', 'No missing ingredients.'));
+    }
+    card.append(createDrinkImage(drink), body);
+    return card;
+}
+
+findCocktails.addEventListener('click', async () => {
+    resetComparison();
+    if (!addedIngredients.size) {
+        setComparisonStatus('Add at least one ingredient before comparing the S-name recipe sample.', 'error');
+        ingredientInput.focus();
+        return;
+    }
+
+    const requestId = latestComparisonRequest;
+    const selectedIngredients = new Set(addedIngredients);
+    const controller = new AbortController();
+    comparisonController = controller;
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    findCocktails.disabled = true;
+    comparisonSection.setAttribute('aria-busy', 'true');
+    setComparisonStatus('Loading the S-name recipe sample and comparing ingredients…', 'loading');
+
+    try {
+        // Always use our backend for this prototype, including local Vercel development.
+        const response = await fetch('/api/cocktails?letter=s', { signal: controller.signal });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (requestId !== latestComparisonRequest) return;
+        if (!data || (data.drinks !== null && !Array.isArray(data.drinks))) {
+            throw new Error('Unexpected API response');
+        }
+        const drinks = data.drinks || [];
+        if (!drinks.length) {
+            setComparisonStatus('No recipes were returned for the S-name recipe sample. Please try again.');
+            return;
+        }
+        if (drinks.some(drink => !drink || typeof drink !== 'object' || Array.isArray(drink))) {
+            throw new Error('Unexpected recipe data');
+        }
+        const comparisons = drinks
+            .map(drink => compareRecipeIngredients(drink, selectedIngredients))
+            .sort((a, b) => a.missingCount - b.missingCount ||
+                cleanText(a.strDrink).localeCompare(cleanText(b.strDrink)));
+        const fragment = document.createDocumentFragment();
+        for (const drink of comparisons) fragment.append(createComparisonCard(drink));
+        comparisonResults.replaceChildren(fragment);
+        setComparisonStatus(`Compared ${comparisons.length} ${comparisons.length === 1 ? 'recipe' : 'recipes'} from the S-name recipe sample, sorted by fewest missing ingredients.`);
+    } catch (error) {
+        if (requestId !== latestComparisonRequest) return;
+        setComparisonStatus(error.name === 'AbortError'
+            ? 'The S-name recipe sample request timed out. Please try again.'
+            : 'Unable to load the S-name recipe sample. Check your connection and make sure the /api/cocktails backend is running, then try again.', 'error');
+    } finally {
+        clearTimeout(timeout);
+        if (requestId === latestComparisonRequest) {
+            comparisonSection.setAttribute('aria-busy', 'false');
+            findCocktails.disabled = false;
+            comparisonController = null;
+        }
+    }
+});
 
 
 function makeElement(tag, text, className) {
