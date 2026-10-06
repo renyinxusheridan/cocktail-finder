@@ -17,6 +17,7 @@ const findCocktails = document.querySelector('#search-submit');
 const comparisonStatus = document.querySelector('#comparison-status');
 const comparisonSection = document.querySelector('#comparison-section');
 const comparisonResults = document.querySelector('#comparison-results');
+const buyNextResults = document.querySelector('#buy-next-results');
 let comparisonController;
 let latestComparisonRequest = 0;
 
@@ -54,8 +55,8 @@ function setSearchMode(mode) {
     input.setAttribute('aria-describedby', byIngredients ? 'search-hint ingredient-status' : 'search-hint');
     searchLabel.textContent = byIngredients ? 'Your ingredients' : 'Cocktail name';
     searchHint.textContent = byIngredients
-        ? 'Try Vodka, lime juice, sugar. Press Enter or type a comma to add ingredients; Find Cocktails includes unfinished text.'
-        : 'Try Margarita, Mojito, or part of a cocktail name.';
+        ? 'Press Enter or type a comma to add ingredients.'
+        : 'Try Margarita or Mojito.';
     findCocktails.textContent = byIngredients ? 'Find Cocktails' : 'Search';
     findCocktails.disabled = false;
     ingredientModeButton.setAttribute('aria-pressed', String(byIngredients));
@@ -108,6 +109,7 @@ function commitIngredients(keepUnfinished = false) {
     if (added.length) {
         ingredientStatus.textContent = `Added: ${added.join(', ')}.${duplicates ? ' Already selected ingredients were skipped.' : ''}`;
     } else if (duplicates) {
+        ingredientStatus.dataset.state = 'notice';
         ingredientStatus.textContent = 'Those ingredients are already selected.';
     } else if (!keepUnfinished) {
         ingredientStatus.textContent = 'Please enter an ingredient.';
@@ -173,10 +175,11 @@ function resetComparison() {
     if (comparisonController) comparisonController.abort();
     comparisonController = null;
     comparisonResults.replaceChildren();
+    buyNextResults.replaceChildren();
     comparisonSection.hidden = true;
     comparisonSection.setAttribute('aria-busy', 'false');
     findCocktails.disabled = false;
-    setComparisonStatus('Ingredients changed. Select Find Cocktails to compare the S-name recipe sample.');
+    setComparisonStatus('');
 }
 
 function createComparisonCard(drink) {
@@ -218,14 +221,13 @@ function createBuyingRecommendations(oneIngredientAway) {
             countB - countA || ingredientA.localeCompare(ingredientB))
         .slice(0, 3);
 
-    const section = makeElement('section', '', 'comparison-group buy-next');
-    const heading = makeElement('h3', 'What to Buy Next');
+    const section = makeElement('section', '', 'buy-next');
+    const heading = makeElement('h2', 'What to Buy Next');
     heading.id = 'buy-next-heading';
     section.setAttribute('aria-labelledby', heading.id);
     section.append(
         heading,
-        makeElement('p', 'Unlock More Drinks', 'section-caption'),
-        makeElement('p', 'These recommendations are based only on the retrieved S-name recipe sample and cocktails in the One Ingredient Away group.', 'hint')
+        makeElement('p', 'Based only on the retrieved S-name recipe sample.', 'hint')
     );
     if (recommendations.length) {
         const list = makeElement('ul');
@@ -269,8 +271,8 @@ function renderComparisonGroups(comparisons) {
             section.append(makeElement('p', 'No cocktails in this group.', 'hint'));
         }
         fragment.append(section);
-        if (index === 2) fragment.append(createBuyingRecommendations(groups[1].drinks));
     });
+    buyNextResults.replaceChildren(createBuyingRecommendations(groups[1].drinks));
     comparisonResults.replaceChildren(fragment);
     comparisonSection.hidden = false;
 }
@@ -315,7 +317,7 @@ async function findByIngredients() {
             .sort((a, b) => a.missingCount - b.missingCount ||
                 cleanText(a.strDrink).localeCompare(cleanText(b.strDrink)));
         renderComparisonGroups(comparisons);
-        setComparisonStatus(`Compared ${comparisons.length} ${comparisons.length === 1 ? 'recipe' : 'recipes'} from the S-name recipe sample, sorted by fewest missing ingredients.`);
+        setComparisonStatus(`${comparisons.length} ${comparisons.length === 1 ? 'cocktail' : 'cocktails'}, sorted by missing ingredients.`);
     } catch (error) {
         if (requestId !== latestComparisonRequest) return;
         setComparisonStatus(error.name === 'AbortError'

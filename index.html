@@ -17,7 +17,6 @@
     <main>
         <section class="hero" aria-labelledby="hero-title">
             <div class="container">
-                <div class="brand-line"><span class="brand-mark" aria-hidden="true">CF</span><span>THE AT-HOME COCKTAIL EDIT</span></div>
                 <header class="hero-copy">
                     <p class="eyebrow">DISCOVER WHAT YOU CAN MAKE</p>
                     <h1 id="hero-title">Cocktail Finder</h1>
@@ -34,14 +33,12 @@
                             placeholder="Enter ingredients, separated by commas" aria-describedby="search-hint ingredient-status">
                         <button id="search-submit" type="submit">Find Cocktails</button>
                     </div>
-                    <p id="search-hint" class="hint">Try Vodka, lime juice, sugar. Press Enter or type a comma to add ingredients; Find Cocktails includes unfinished text.</p>
+                    <p id="search-hint" class="hint">Press Enter or type a comma to add ingredients.</p>
                     <div id="ingredient-controls">
                         <ul id="ingredient-list" class="ingredient-list" aria-label="Added ingredients" role="list"></ul>
                         <p id="ingredient-status" class="hint" role="status" aria-live="polite" aria-atomic="true"></p>
-                        <p class="sample-note">A little inspiration from the S-name recipe sample. Ingredient names match exactly, ignoring capitalization and extra spaces.</p>
                     </div>
                 </form>
-                <p class="hero-caption">YOUR SHELF. YOUR NEXT SIP.</p>
             </div>
         </section>
         <div class="container results-area">
@@ -53,9 +50,9 @@
             </section>
         </div>
         <div id="ingredient-output">
-            <p id="comparison-status" role="status" aria-live="polite" aria-atomic="true">Add ingredients, then select Find Cocktails to compare the S-name recipe sample.</p>
+            <p id="comparison-status" role="status" aria-live="polite" aria-atomic="true"></p>
+            <div id="buy-next-results"></div>
             <section id="comparison-section" aria-labelledby="comparison-heading" aria-busy="false" hidden>
-                <p class="eyebrow">FROM YOUR SHELF TO YOUR GLASS</p>
                 <h2 id="comparison-heading">Results from the S-name recipe sample</h2>
                 <div id="comparison-results"></div>
             </section>
