@@ -120,6 +120,38 @@ function createComparisonCard(drink) {
     return card;
 }
 
+function createBuyingRecommendations(oneIngredientAway) {
+    const unlockCounts = new Map();
+    for (const drink of oneIngredientAway) {
+        const ingredient = drink.missingIngredients[0];
+        unlockCounts.set(ingredient, (unlockCounts.get(ingredient) || 0) + 1);
+    }
+    const recommendations = [...unlockCounts.entries()]
+        .sort(([ingredientA, countA], [ingredientB, countB]) =>
+            countB - countA || ingredientA.localeCompare(ingredientB))
+        .slice(0, 3);
+
+    const section = makeElement('section', '', 'comparison-group');
+    const heading = makeElement('h4', 'What to Buy Next');
+    heading.id = 'buy-next-heading';
+    section.setAttribute('aria-labelledby', heading.id);
+    section.append(
+        heading,
+        makeElement('p', 'These recommendations are based only on the retrieved S-name recipe sample and cocktails in the One Ingredient Away group.', 'hint')
+    );
+    if (recommendations.length) {
+        const list = makeElement('ul');
+        for (const [ingredient, count] of recommendations) {
+            const name = ingredient.charAt(0).toUpperCase() + ingredient.slice(1);
+            list.append(makeElement('li', `${name} — unlocks ${count} ${count === 1 ? 'cocktail' : 'cocktails'}`));
+        }
+        section.append(list);
+    } else {
+        section.append(makeElement('p', 'No single ingredient can unlock another cocktail in the current S-name sample.', 'hint'));
+    }
+    return section;
+}
+
 function renderComparisonGroups(comparisons) {
     const groups = [
         { title: 'Can Make Now', drinks: [] },
@@ -133,6 +165,7 @@ function renderComparisonGroups(comparisons) {
     }
 
     const fragment = document.createDocumentFragment();
+    fragment.append(createBuyingRecommendations(groups[1].drinks));
     groups.forEach((group, index) => {
         const section = makeElement('section', '', 'comparison-group');
         const count = group.drinks.length;
