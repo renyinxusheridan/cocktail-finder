@@ -5,58 +5,64 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cocktail Finder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
 </head>
 
 <body>
 
-    <main class="container">
-        <header>
-            <p class="eyebrow">DISCOVER YOUR NEXT COCKTAIL</p>
-            <h1>Cocktail Finder</h1>
-            <p>Find a recipe by name, then explore its ingredients and instructions.</p>
-        </header>
-
-
-        <form id="search-form" novalidate>
-            <label for="cocktail-name">Cocktail name</label>
-            <div class="search-row">
-                <input id="cocktail-name" name="cocktail" type="search"
-                    placeholder="e.g. Margarita" aria-describedby="search-hint" required>
-                <button type="submit">Search</button>
+    <main>
+        <section class="hero" aria-labelledby="hero-title">
+            <div class="container">
+                <div class="brand-line"><span class="brand-mark" aria-hidden="true">CF</span><span>THE AT-HOME COCKTAIL EDIT</span></div>
+                <header class="hero-copy">
+                    <p class="eyebrow">DISCOVER WHAT YOU CAN MAKE</p>
+                    <h1 id="hero-title">Cocktail Finder</h1>
+                    <p class="hero-description">Turn the ingredients you already have into your next drink.</p>
+                </header>
+                <form id="search-form" class="search-panel" novalidate>
+                    <div class="mode-selector" role="group" aria-label="Search mode">
+                        <button id="mode-ingredients" type="button" aria-pressed="true">By ingredients</button>
+                        <button id="mode-name" type="button" aria-pressed="false">By cocktail name</button>
+                    </div>
+                    <label id="search-label" for="search-input">Your ingredients</label>
+                    <div class="search-row">
+                        <input id="search-input" name="query" type="text" autocomplete="off"
+                            placeholder="Enter ingredients, separated by commas" aria-describedby="search-hint ingredient-status">
+                        <button id="search-submit" type="submit">Find Cocktails</button>
+                    </div>
+                    <p id="search-hint" class="hint">Try Vodka, lime juice, sugar. Press Enter or type a comma to add ingredients; Find Cocktails includes unfinished text.</p>
+                    <div id="ingredient-controls">
+                        <ul id="ingredient-list" class="ingredient-list" aria-label="Added ingredients" role="list"></ul>
+                        <p id="ingredient-status" class="hint" role="status" aria-live="polite" aria-atomic="true"></p>
+                        <p class="sample-note">A little inspiration from the S-name recipe sample. Ingredient names match exactly, ignoring capitalization and extra spaces.</p>
+                    </div>
+                </form>
+                <p class="hero-caption">YOUR SHELF. YOUR NEXT SIP.</p>
             </div>
-            <p id="search-hint" class="hint">Try Margarita, Mojito, or a part of a cocktail name.</p>
-        </form>
-
-        <p id="status" role="status" aria-live="polite" aria-atomic="true">Enter a cocktail name to get started.</p>
-        <section aria-labelledby="results-heading" id="results-section" aria-busy="false">
-            <h2 id="results-heading">Recipes</h2>
-            <div id="results" class="results-grid"></div>
         </section>
-        <section class="ingredient-section" aria-labelledby="ingredients-heading">
-            <h2 id="ingredients-heading">Find Cocktails by Ingredients</h2>
-            <form id="ingredient-form" novalidate>
-                <label for="ingredient-name">Ingredient</label>
-                <div class="search-row">
-                    <input id="ingredient-name" name="ingredient" type="text"
-                        placeholder="e.g. Lime juice" aria-describedby="ingredient-hint ingredient-status" required>
-                    <button type="submit">Add</button>
-                </div>
-                <p id="ingredient-hint" class="hint">Add one ingredient at a time using Enter or the Add button.</p>
-                <p id="ingredient-status" class="hint" role="status" aria-live="polite" aria-atomic="true"></p>
-                <ul id="ingredient-list" class="ingredient-list" aria-label="Added ingredients" role="list"></ul>
-                <button id="find-cocktails" type="button" aria-describedby="ingredient-search-hint">Find Cocktails</button>
-                <p id="ingredient-search-hint" class="hint">Compare your added ingredients with the S-name recipe sample only. Ingredient names must match exactly, ignoring capitalization and extra spaces.</p>
-            </form>
+        <div class="container results-area">
+        <div id="name-search-output" hidden>
+            <p id="status" role="status" aria-live="polite" aria-atomic="true">Enter a cocktail name to get started.</p>
+            <section aria-labelledby="results-heading" id="results-section" aria-busy="false" hidden>
+                <h2 id="results-heading">Your cocktail edit</h2>
+                <div id="results" class="results-grid"></div>
+            </section>
+        </div>
+        <div id="ingredient-output">
             <p id="comparison-status" role="status" aria-live="polite" aria-atomic="true">Add ingredients, then select Find Cocktails to compare the S-name recipe sample.</p>
-            <section id="comparison-section" aria-labelledby="comparison-heading" aria-busy="false">
-                <h3 id="comparison-heading">Results from the S-name recipe sample</h3>
+            <section id="comparison-section" aria-labelledby="comparison-heading" aria-busy="false" hidden>
+                <p class="eyebrow">FROM YOUR SHELF TO YOUR GLASS</p>
+                <h2 id="comparison-heading">Results from the S-name recipe sample</h2>
                 <div id="comparison-results"></div>
             </section>
-        </section>
+        </div>
         <noscript>Please enable JavaScript to search for cocktail recipes.</noscript>
-        <footer>Recipe data and images from <a href="https://www.thecocktaildb.com/">TheCocktailDB</a>.</footer>
+        <footer><span>Cocktail Finder</span><span>Recipe data and images from <a href="https://www.thecocktaildb.com/">TheCocktailDB</a>.</span></footer>
+        </div>
     </main>
     <dialog id="recipe-dialog" aria-labelledby="recipe-title">
         <button type="button" class="dialog-close" aria-label="Close recipe" autofocus>&times;</button>

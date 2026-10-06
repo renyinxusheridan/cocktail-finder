@@ -1,5 +1,5 @@
 const form = document.querySelector('#search-form');
-const input = document.querySelector('#cocktail-name');
+const input = document.querySelector('#search-input');
 const status = document.querySelector('#status');
 const results = document.querySelector('#results');
 const resultsSection = document.querySelector('#results-section');
@@ -9,33 +9,69 @@ const closeRecipe = document.querySelector('.dialog-close');
 let activeController;
 let latestRequest = 0;
 
-const ingredientForm = document.querySelector('#ingredient-form');
-const ingredientInput = document.querySelector('#ingredient-name');
+const ingredientInput = input;
 const ingredientList = document.querySelector('#ingredient-list');
 const ingredientStatus = document.querySelector('#ingredient-status');
 const addedIngredients = new Set();
-const findCocktails = document.querySelector('#find-cocktails');
+const findCocktails = document.querySelector('#search-submit');
 const comparisonStatus = document.querySelector('#comparison-status');
 const comparisonSection = document.querySelector('#comparison-section');
 const comparisonResults = document.querySelector('#comparison-results');
 let comparisonController;
 let latestComparisonRequest = 0;
 
-ingredientForm.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const ingredient = ingredientInput.value.trim().replace(/\s+/g, ' ');
-    const key = normalizeIngredient(ingredient);
+const ingredientModeButton = document.querySelector('#mode-ingredients');
+const nameModeButton = document.querySelector('#mode-name');
+const searchLabel = document.querySelector('#search-label');
+const searchHint = document.querySelector('#search-hint');
+const ingredientControls = document.querySelector('#ingredient-controls');
+const ingredientOutput = document.querySelector('#ingredient-output');
+const nameOutput = document.querySelector('#name-search-output');
+const inputDrafts = { ingredients: '', name: '' };
+let searchMode = 'ingredients';
 
-    if (!ingredient || addedIngredients.has(key)) {
-        ingredientInput.setAttribute('aria-invalid', 'true');
-        ingredientStatus.dataset.state = 'error';
-        ingredientStatus.textContent = !ingredient
-            ? 'Please enter an ingredient.'
-            : `${ingredient} is already added.`;
-        ingredientInput.focus();
-        return;
+function setSearchMode(mode) {
+    if (mode === searchMode) return;
+    inputDrafts[searchMode] = input.value;
+    // Cancel pending work so an old response cannot update the shared controls.
+    latestRequest++;
+    latestComparisonRequest++;
+    if (activeController) activeController.abort();
+    if (comparisonController) comparisonController.abort();
+    activeController = null;
+    comparisonController = null;
+    resultsSection.setAttribute('aria-busy', 'false');
+    comparisonSection.setAttribute('aria-busy', 'false');
+    if (status.dataset.state === 'loading') setStatus('Search paused. Search again when you are ready.');
+    if (comparisonStatus.dataset.state === 'loading') {
+        setComparisonStatus('Comparison paused. Select Find Cocktails to try again.');
     }
+    searchMode = mode;
+    const byIngredients = mode === 'ingredients';
+    input.value = inputDrafts[mode];
+    input.removeAttribute('aria-invalid');
+    input.placeholder = byIngredients ? 'Enter ingredients, separated by commas' : 'Search for a cocktail';
+    input.setAttribute('aria-describedby', byIngredients ? 'search-hint ingredient-status' : 'search-hint');
+    searchLabel.textContent = byIngredients ? 'Your ingredients' : 'Cocktail name';
+    searchHint.textContent = byIngredients
+        ? 'Try Vodka, lime juice, sugar. Press Enter or type a comma to add ingredients; Find Cocktails includes unfinished text.'
+        : 'Try Margarita, Mojito, or part of a cocktail name.';
+    findCocktails.textContent = byIngredients ? 'Find Cocktails' : 'Search';
+    findCocktails.disabled = false;
+    ingredientModeButton.setAttribute('aria-pressed', String(byIngredients));
+    nameModeButton.setAttribute('aria-pressed', String(!byIngredients));
+    ingredientControls.hidden = !byIngredients;
+    ingredientOutput.hidden = !byIngredients;
+    nameOutput.hidden = byIngredients;
+}
 
+ingredientModeButton.addEventListener('click', () => setSearchMode('ingredients'));
+nameModeButton.addEventListener('click', () => setSearchMode('name'));
+
+function addIngredient(value) {
+    const ingredient = value.trim().replace(/\s+/g, ' ');
+    const key = normalizeIngredient(ingredient);
+    if (!key || addedIngredients.has(key)) return false;
     addedIngredients.add(key);
     resetComparison();
     const chip = makeElement('li', '', 'ingredient-chip');
@@ -48,22 +84,64 @@ ingredientForm.addEventListener('submit', (event) => {
         chip.remove();
         ingredientStatus.dataset.state = '';
         ingredientStatus.textContent = `${ingredient} removed.`;
-        ingredientInput.removeAttribute('aria-invalid');
-        ingredientInput.focus();
+        input.removeAttribute('aria-invalid');
+        input.focus();
     });
     chip.append(makeElement('span', ingredient), removeButton);
     ingredientList.append(chip);
-    ingredientInput.value = '';
-    ingredientInput.removeAttribute('aria-invalid');
-    ingredientStatus.dataset.state = '';
-    ingredientStatus.textContent = `${ingredient} added.`;
-    ingredientInput.focus();
-});
+    return true;
+}
 
-ingredientInput.addEventListener('input', () => {
-    ingredientInput.removeAttribute('aria-invalid');
+function commitIngredients(keepUnfinished = false) {
+    const parts = input.value.split(',');
+    const unfinished = keepUnfinished ? parts.pop() : '';
+    const added = [];
+    let duplicates = 0;
+    for (const part of parts) {
+        if (!part.trim()) continue;
+        if (addIngredient(part)) added.push(part.trim().replace(/\s+/g, ' '));
+        else duplicates++;
+    }
+    input.value = unfinished;
+    input.removeAttribute('aria-invalid');
+    ingredientStatus.dataset.state = '';
+    if (added.length) {
+        ingredientStatus.textContent = `Added: ${added.join(', ')}.${duplicates ? ' Already selected ingredients were skipped.' : ''}`;
+    } else if (duplicates) {
+        ingredientStatus.textContent = 'Those ingredients are already selected.';
+    } else if (!keepUnfinished) {
+        ingredientStatus.textContent = 'Please enter an ingredient.';
+        ingredientStatus.dataset.state = 'error';
+        input.setAttribute('aria-invalid', 'true');
+    }
+}
+
+input.addEventListener('keydown', (event) => {
+    if (event.isComposing || searchMode !== 'ingredients' || event.key !== 'Enter') return;
+    if (input.value.trim()) {
+        event.preventDefault();
+        commitIngredients();
+    }
+});
+input.addEventListener('input', (event) => {
+    input.removeAttribute('aria-invalid');
+    if (searchMode !== 'ingredients') return;
     ingredientStatus.dataset.state = '';
     ingredientStatus.textContent = '';
+    if (!event.isComposing && input.value.includes(',')) commitIngredients(true);
+});
+input.addEventListener('compositionend', () => {
+    if (searchMode === 'ingredients' && input.value.includes(',')) commitIngredients(true);
+});
+
+form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (searchMode === 'ingredients') {
+        if (input.value.trim()) commitIngredients();
+        await findByIngredients();
+    } else {
+        await searchByName();
+    }
 });
 
 function cleanText(value) {
@@ -95,6 +173,7 @@ function resetComparison() {
     if (comparisonController) comparisonController.abort();
     comparisonController = null;
     comparisonResults.replaceChildren();
+    comparisonSection.hidden = true;
     comparisonSection.setAttribute('aria-busy', 'false');
     findCocktails.disabled = false;
     setComparisonStatus('Ingredients changed. Select Find Cocktails to compare the S-name recipe sample.');
@@ -103,8 +182,9 @@ function resetComparison() {
 function createComparisonCard(drink) {
     const card = makeElement('article', '', 'comparison-card');
     const body = makeElement('div', '', 'recipe-body');
-    const heading = makeElement('h5');
-    const openButton = makeElement('button', cleanText(drink.strDrink) || 'Unnamed cocktail', 'comparison-open');
+    const heading = makeElement('h4');
+    const openButton = makeElement('button', '', 'comparison-open');
+    openButton.append(makeElement('span', cleanText(drink.strDrink) || 'Unnamed cocktail', 'cocktail-title'));
     openButton.type = 'button';
     openButton.setAttribute('aria-haspopup', 'dialog');
     openButton.setAttribute('aria-controls', 'recipe-dialog');
@@ -138,12 +218,13 @@ function createBuyingRecommendations(oneIngredientAway) {
             countB - countA || ingredientA.localeCompare(ingredientB))
         .slice(0, 3);
 
-    const section = makeElement('section', '', 'comparison-group');
-    const heading = makeElement('h4', 'What to Buy Next');
+    const section = makeElement('section', '', 'comparison-group buy-next');
+    const heading = makeElement('h3', 'What to Buy Next');
     heading.id = 'buy-next-heading';
     section.setAttribute('aria-labelledby', heading.id);
     section.append(
         heading,
+        makeElement('p', 'Unlock More Drinks', 'section-caption'),
         makeElement('p', 'These recommendations are based only on the retrieved S-name recipe sample and cocktails in the One Ingredient Away group.', 'hint')
     );
     if (recommendations.length) {
@@ -161,10 +242,10 @@ function createBuyingRecommendations(oneIngredientAway) {
 
 function renderComparisonGroups(comparisons) {
     const groups = [
-        { title: 'Can Make Now', drinks: [] },
-        { title: 'One Ingredient Away', drinks: [] },
-        { title: 'Two Ingredients Away', drinks: [] },
-        { title: 'More Ingredients Needed', drinks: [] }
+        { title: 'Can Make Now', caption: 'Ready to Pour', drinks: [] },
+        { title: 'One Ingredient Away', caption: 'Almost There', drinks: [] },
+        { title: 'Two Ingredients Away', caption: 'A Few Additions', drinks: [] },
+        { title: 'More Ingredients Needed', caption: 'Keep Exploring', drinks: [] }
     ];
     // Input is already sorted; appending preserves that order within each group.
     for (const drink of comparisons) {
@@ -172,14 +253,14 @@ function renderComparisonGroups(comparisons) {
     }
 
     const fragment = document.createDocumentFragment();
-    fragment.append(createBuyingRecommendations(groups[1].drinks));
     groups.forEach((group, index) => {
         const section = makeElement('section', '', 'comparison-group');
         const count = group.drinks.length;
-        const heading = makeElement('h4', `${group.title} — ${count} ${count === 1 ? 'cocktail' : 'cocktails'}`);
+        const heading = makeElement('h3', group.title);
+        heading.append(makeElement('span', `${count} ${count === 1 ? 'cocktail' : 'cocktails'}`, 'group-count'));
         heading.id = `comparison-group-${index}-heading`;
         section.setAttribute('aria-labelledby', heading.id);
-        section.append(heading);
+        section.append(heading, makeElement('p', group.caption, 'section-caption'));
         if (count) {
             const grid = makeElement('div', '', 'results-grid');
             for (const drink of group.drinks) grid.append(createComparisonCard(drink));
@@ -188,11 +269,13 @@ function renderComparisonGroups(comparisons) {
             section.append(makeElement('p', 'No cocktails in this group.', 'hint'));
         }
         fragment.append(section);
+        if (index === 2) fragment.append(createBuyingRecommendations(groups[1].drinks));
     });
     comparisonResults.replaceChildren(fragment);
+    comparisonSection.hidden = false;
 }
 
-findCocktails.addEventListener('click', async () => {
+async function findByIngredients() {
     resetComparison();
     if (!addedIngredients.size) {
         setComparisonStatus('Add at least one ingredient before comparing the S-name recipe sample.', 'error');
@@ -246,7 +329,7 @@ findCocktails.addEventListener('click', async () => {
             comparisonController = null;
         }
     }
-});
+}
 
 
 function makeElement(tag, text, className) {
@@ -326,12 +409,13 @@ recipeDialog.addEventListener('click', (event) => {
     }
 });
 
-form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-   
+async function searchByName() {
     const requestId = ++latestRequest;
     if (activeController) activeController.abort();
+    activeController = null;
+    findCocktails.disabled = false;
     results.replaceChildren();
+    resultsSection.hidden = true;
     resultsSection.setAttribute('aria-busy', 'false');
     const query = input.value.trim();
     input.removeAttribute('aria-invalid');
@@ -345,6 +429,7 @@ form.addEventListener('submit', async (event) => {
     const controller = new AbortController();
     activeController = controller;
     const timeout = setTimeout(() => controller.abort(), 15000);
+    findCocktails.disabled = true;
     setStatus(`Searching for “${query}”…`, 'loading');
     resultsSection.setAttribute('aria-busy', 'true');
 
@@ -372,6 +457,7 @@ form.addEventListener('submit', async (event) => {
         const fragment = document.createDocumentFragment();
         for (const drink of drinks) fragment.append(createRecipe(drink));
         results.replaceChildren(fragment);
+        resultsSection.hidden = false;
         setStatus(`Found ${drinks.length} ${drinks.length === 1 ? 'cocktail' : 'cocktails'} for “${query}”.`);
     } catch (error) {
         if (requestId !== latestRequest) return;
@@ -383,6 +469,7 @@ form.addEventListener('submit', async (event) => {
         if (requestId === latestRequest) {
             resultsSection.setAttribute('aria-busy', 'false');
             activeController = null;
+            findCocktails.disabled = false;
         }
     }
-});
+}
