@@ -5,15 +5,16 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Only GET requests are allowed.' });
     }
 
-    // Read the name from /api/cocktails?name=margarita.
+    // Support either ?name=margarita or ?letter=s; name takes precedence.
     const name = typeof req.query.name === 'string' ? req.query.name.trim() : '';
-    if (!name) {
-        return res.status(400).json({ error: 'Please enter a cocktail name.' });
+    const letter = typeof req.query.letter === 'string' ? req.query.letter.trim().toLowerCase() : '';
+    if (!name && !/^[a-z]$/.test(letter)) {
+        return res.status(400).json({ error: 'Please enter a cocktail name or a single letter from A to Z.' });
     }
 
     // URLSearchParams safely handles spaces and special characters in the name.
     const url = new URL('https://www.thecocktaildb.com/api/json/v1/1/search.php');
-    url.searchParams.set('s', name);
+    url.searchParams.set(name ? 's' : 'f', name || letter);
 
     try {
         const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
