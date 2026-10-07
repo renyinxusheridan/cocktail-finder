@@ -9,13 +9,14 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="result-navigation.js" defer></script>
     <script src="script.js" defer></script>
 </head>
 
 <body>
 
     <main>
-        <section class="hero" aria-labelledby="hero-title">
+        <section id="search-area" class="hero" aria-labelledby="hero-title">
             <div class="container">
                 <header class="hero-copy">
                     <p class="eyebrow">DISCOVER WHAT YOU CAN MAKE</p>
@@ -41,26 +42,33 @@
                 </form>
             </div>
         </section>
-        <div class="container results-area">
-        <div id="name-search-output" hidden>
-            <p id="status" role="status" aria-live="polite" aria-atomic="true">Enter a cocktail name to get started.</p>
-            <section aria-labelledby="results-heading" id="results-section" aria-busy="false" hidden>
-                <h2 id="results-heading">Your cocktail edit</h2>
-                <div id="results" class="results-grid"></div>
-            </section>
-        </div>
-        <div id="ingredient-output">
-            <p id="comparison-status" role="status" aria-live="polite" aria-atomic="true"></p>
-            <div id="buy-next-results"></div>
-            <section id="comparison-section" aria-labelledby="comparison-heading" aria-busy="false" hidden>
-                <h2 id="comparison-heading">Results from the S-name recipe sample</h2>
-                <div id="comparison-results"></div>
-            </section>
-        </div>
-        <noscript>Please enable JavaScript to search for cocktail recipes.</noscript>
-        <footer><span>Cocktail Finder</span><span>Recipe data and images from <a href="https://www.thecocktaildb.com/">TheCocktailDB</a>.</span></footer>
+        <div id="results-area" class="results-area">
+            <div class="container">
+                <div id="name-search-output" hidden>
+                    <p id="status" role="status" aria-live="polite" aria-atomic="true">Enter a cocktail name to get started.</p>
+                    <section aria-labelledby="results-heading" id="results-section" aria-busy="false" hidden>
+                        <h2 id="results-heading">Your cocktail edit</h2>
+                        <div id="results" class="results-grid"></div>
+                    </section>
+                </div>
+                <div id="ingredient-output">
+                    <p id="comparison-status" role="status" aria-live="polite" aria-atomic="true"></p>
+                    <div id="buy-next-results"></div>
+                    <section id="comparison-section" aria-labelledby="comparison-heading" aria-busy="false" hidden>
+                        <h2 id="comparison-heading">Results from the S-name recipe sample</h2>
+                        <div id="comparison-results"></div>
+                    </section>
+                </div>
+                <noscript>Please enable JavaScript to search for cocktail recipes.</noscript>
+                <footer><span>Cocktail Finder</span><span>Recipe data and images from <a href="https://www.thecocktaildb.com/">TheCocktailDB</a>.</span></footer>
+            </div>
         </div>
     </main>
+    <nav id="result-navigation" class="result-navigation" aria-label="Result sections" hidden>
+        <ul id="result-navigation-links"></ul>
+        <button type="button" class="back-to-top" aria-label="Back to top and focus search input"><span aria-hidden="true">↑</span> Back to Top</button>
+    </nav>
+    <button id="mobile-back-to-top" class="mobile-back-to-top" type="button" aria-label="Back to top and focus search input" hidden><span aria-hidden="true">↑</span></button>
     <dialog id="recipe-dialog" aria-labelledby="recipe-title">
         <button type="button" class="dialog-close" aria-label="Close recipe" autofocus>&times;</button>
         <div id="recipe-details" class="recipe-details"></div>

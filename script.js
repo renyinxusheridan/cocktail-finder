@@ -33,6 +33,7 @@ let searchMode = 'ingredients';
 
 function setSearchMode(mode) {
     if (mode === searchMode) return;
+    resultNavigation.reset();
     inputDrafts[searchMode] = input.value;
     // Cancel pending work so an old response cannot update the shared controls.
     latestRequest++;
@@ -64,6 +65,7 @@ function setSearchMode(mode) {
     ingredientControls.hidden = !byIngredients;
     ingredientOutput.hidden = !byIngredients;
     nameOutput.hidden = byIngredients;
+    resultNavigation.refresh(mode);
 }
 
 ingredientModeButton.addEventListener('click', () => setSearchMode('ingredients'));
@@ -126,6 +128,7 @@ input.addEventListener('keydown', (event) => {
     }
 });
 input.addEventListener('input', (event) => {
+    resultNavigation.cancelPending();
     input.removeAttribute('aria-invalid');
     if (searchMode !== 'ingredients') return;
     ingredientStatus.dataset.state = '';
@@ -180,6 +183,7 @@ function resetComparison() {
     comparisonSection.setAttribute('aria-busy', 'false');
     findCocktails.disabled = false;
     setComparisonStatus('');
+    resultNavigation.reset();
 }
 
 function createComparisonCard(drink) {
@@ -222,6 +226,7 @@ function createBuyingRecommendations(oneIngredientAway) {
         .slice(0, 3);
 
     const section = makeElement('section', '', 'buy-next');
+    section.id = 'buy-next-section';
     const heading = makeElement('h2', 'What to Buy Next');
     heading.id = 'buy-next-heading';
     section.setAttribute('aria-labelledby', heading.id);
@@ -257,6 +262,8 @@ function renderComparisonGroups(comparisons) {
     const fragment = document.createDocumentFragment();
     groups.forEach((group, index) => {
         const section = makeElement('section', '', 'comparison-group');
+        section.id = `comparison-group-${index}`;
+        section.dataset.navigationLabel = group.title;
         const count = group.drinks.length;
         const heading = makeElement('h3', group.title);
         heading.append(makeElement('span', `${count} ${count === 1 ? 'cocktail' : 'cocktails'}`, 'group-count'));
@@ -282,6 +289,7 @@ async function findByIngredients() {
     if (!addedIngredients.size) {
         setComparisonStatus('Add at least one ingredient before comparing the S-name recipe sample.', 'error');
         ingredientInput.focus();
+        resultNavigation.complete('ingredients');
         return;
     }
 
@@ -329,6 +337,7 @@ async function findByIngredients() {
             comparisonSection.setAttribute('aria-busy', 'false');
             findCocktails.disabled = false;
             comparisonController = null;
+            resultNavigation.complete('ingredients');
         }
     }
 }
@@ -412,6 +421,7 @@ recipeDialog.addEventListener('click', (event) => {
 });
 
 async function searchByName() {
+    resultNavigation.reset();
     const requestId = ++latestRequest;
     if (activeController) activeController.abort();
     activeController = null;
@@ -425,6 +435,7 @@ async function searchByName() {
         input.setAttribute('aria-invalid', 'true');
         setStatus('Please enter a cocktail name.', 'error');
         input.focus();
+        resultNavigation.complete('name');
         return;
     }
 
@@ -472,6 +483,7 @@ async function searchByName() {
             resultsSection.setAttribute('aria-busy', 'false');
             activeController = null;
             findCocktails.disabled = false;
+            resultNavigation.complete('name');
         }
     }
 }
