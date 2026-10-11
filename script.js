@@ -532,8 +532,15 @@ function compareRecipeIngredients(drink, selectedIngredients) {
         const ingredient = normalizeIngredient(drink[`strIngredient${i}`]);
         if (ingredient) recipeIngredients.add(ingredient);
     }
+    const matchedIngredients = [...recipeIngredients].filter(ingredient => selectedIngredients.has(ingredient));
     const missingIngredients = [...recipeIngredients].filter(ingredient => !selectedIngredients.has(ingredient));
-    return { ...drink, missingIngredients, missingCount: missingIngredients.length };
+    return {
+        ...drink,
+        matchedIngredients,
+        matchedCount: matchedIngredients.length,
+        missingIngredients,
+        missingCount: missingIngredients.length
+    };
 }
 
 function setComparisonStatus(message, state = '') {
@@ -617,11 +624,17 @@ function createBuyingRecommendations(oneIngredientAway) {
 }
 
 function renderComparisonGroups(comparisons) {
+    if (!comparisons.length) {
+        comparisonResults.replaceChildren();
+        buyNextResults.replaceChildren();
+        comparisonSection.hidden = true;
+        return;
+    }
     const groups = [
         { title: 'Can Make Now', caption: 'Ready to Pour', drinks: [] },
         { title: 'One Ingredient Away', caption: 'Almost There', drinks: [] },
         { title: 'Two Ingredients Away', caption: 'A Few Additions', drinks: [] },
-        { title: 'More Ingredients Needed', caption: 'Keep Exploring', drinks: [] }
+        { title: 'More Ingredients Away', caption: 'Keep Exploring', drinks: [] }
     ];
     // Input is already sorted; appending preserves that order within each group.
     for (const drink of comparisons) {
@@ -663,7 +676,7 @@ async function findByIngredients() {
     }
 
     const requestId = latestComparisonRequest;
-    const selectedIngredients = new Set(addedIngredients);
+    const selectedIngredients = new Set([...addedIngredients].map(normalizeIngredient));
     const controller = new AbortController();
     comparisonController = controller;
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -690,12 +703,17 @@ async function findByIngredients() {
             throw new Error('Unexpected recipe data');
         }
         indexRecipeIngredients(drinks);
+        // Keep all retrieved recipes intact; relevance applies only to recommendations.
         const comparisons = drinks
             .map(drink => compareRecipeIngredients(drink, selectedIngredients))
+            .filter(drink => drink.matchedCount > 0)
             .sort((a, b) => a.missingCount - b.missingCount ||
+                b.matchedCount - a.matchedCount ||
                 cleanText(a.strDrink).localeCompare(cleanText(b.strDrink)));
         renderComparisonGroups(comparisons);
-        setComparisonStatus(`${comparisons.length} ${comparisons.length === 1 ? 'cocktail' : 'cocktails'}, sorted by missing ingredients.`);
+        setComparisonStatus(comparisons.length
+            ? `${comparisons.length} ${comparisons.length === 1 ? 'cocktail' : 'cocktails'} using your ingredients, sorted by missing ingredients.`
+            : 'None of the recipes currently searched use your selected ingredients. Try adding another ingredient.');
     } catch (error) {
         if (requestId !== latestComparisonRequest) return;
         setComparisonStatus(error.name === 'AbortError'
