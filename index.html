@@ -5,13 +5,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cocktail Finder</title>
-    <meta name="cocktail-finder-build" content="closest-matches-2">
+    <meta name="cocktail-finder-build" content="recipe-dataset-1">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=closest-matches-1">
-    <script src="result-navigation.js?v=closest-matches-2" defer></script>
-    <script src="script.js?v=closest-matches-2" defer></script>
+    <link rel="stylesheet" href="style.css?v=recipe-dataset-1">
+    <script src="result-navigation.js?v=recipe-dataset-1" defer></script>
+    <script src="script.js?v=recipe-dataset-1" defer></script>
 </head>
 
 <body>
@@ -77,10 +77,12 @@
                     </section>
                 </div>
                 <div id="ingredient-output">
+                    <p id="recipe-dataset-status" class="hint" role="status" aria-live="polite" aria-atomic="true"></p>
+                    <button id="recipe-dataset-retry" class="ingredient-retry" type="button" hidden>Retry failed letters</button>
                     <p id="comparison-status" role="status" aria-live="polite" aria-atomic="true"></p>
                     <div id="buy-next-results"></div>
                     <section id="comparison-section" aria-labelledby="comparison-heading" aria-busy="false" hidden>
-                        <h2 id="comparison-heading">Results from the S-name recipe sample</h2>
+                        <h2 id="comparison-heading">Cocktails using your ingredients</h2>
                         <div id="comparison-results"></div>
                     </section>
                 </div>

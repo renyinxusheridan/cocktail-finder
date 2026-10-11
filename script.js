@@ -40,7 +40,14 @@ const comparisonStatus = document.querySelector('#comparison-status');
 const comparisonSection = document.querySelector('#comparison-section');
 const comparisonResults = document.querySelector('#comparison-results');
 const buyNextResults = document.querySelector('#buy-next-results');
-let comparisonController;
+const recipeDatasetStatus = document.querySelector('#recipe-dataset-status');
+const recipeDatasetRetry = document.querySelector('#recipe-dataset-retry');
+const recipeLetters = [...'abcdefghijklmnopqrstuvwxyz'];
+const recipeLetterCache = new Map();
+const failedRecipeLetters = new Map();
+let recipeLoadPromise;
+let recipeProgressListener;
+let recipeLoadProgress = { completed: 0, total: 0, retrying: false };
 let latestComparisonRequest = 0;
 
 const ingredientModeButton = document.querySelector('#mode-ingredients');
@@ -75,14 +82,16 @@ function setSearchMode(mode) {
     latestRequest++;
     latestComparisonRequest++;
     if (activeController) activeController.abort();
-    if (comparisonController) comparisonController.abort();
     activeController = null;
-    comparisonController = null;
+    recipeProgressListener = null;
+    recipeDatasetRetry.disabled = false;
     resultsSection.setAttribute('aria-busy', 'false');
     comparisonSection.setAttribute('aria-busy', 'false');
     if (status.dataset.state === 'loading') setStatus('Search paused. Search again when you are ready.');
     if (comparisonStatus.dataset.state === 'loading') {
-        setComparisonStatus('Comparison paused. Select Find Cocktails to try again.');
+        setComparisonStatus('Comparison paused. Select Find Cocktails to compare the cached recipes.');
+        recipeDatasetStatus.textContent = '';
+        recipeDatasetRetry.hidden = true;
     }
     searchMode = mode;
     const byIngredients = mode === 'ingredients';
@@ -563,18 +572,101 @@ function setComparisonStatus(message, state = '') {
 }
 
 function resetComparison() {
-    // Ingredient changes invalidate both displayed results and any pending request.
+    // Invalidate the comparison UI, but let shared letter requests finish into the cache.
     latestComparisonRequest++;
-    if (comparisonController) comparisonController.abort();
-    comparisonController = null;
+    recipeProgressListener = null;
     comparisonResults.replaceChildren();
     buyNextResults.replaceChildren();
     comparisonSection.hidden = true;
     comparisonSection.setAttribute('aria-busy', 'false');
     findCocktails.disabled = false;
     setComparisonStatus('');
+    recipeDatasetStatus.textContent = '';
+    recipeDatasetRetry.hidden = true;
+    recipeDatasetRetry.disabled = false;
     resultNavigation.reset();
 }
+
+function getRetrievedRecipes() {
+    const uniqueRecipes = new Map();
+    for (const letter of recipeLetters) {
+        for (const drink of recipeLetterCache.get(letter) || []) {
+            const id = drink.idDrink.trim();
+            if (!uniqueRecipes.has(id)) uniqueRecipes.set(id, drink);
+        }
+    }
+    return [...uniqueRecipes.values()];
+}
+
+async function retrieveRecipeLetter(letter) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+        const response = await fetch(`/api/cocktails?letter=${letter}`, { signal: controller.signal });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (!data || (data.drinks !== null && !Array.isArray(data.drinks))) {
+            throw new Error('Unexpected recipe response');
+        }
+        const drinks = data.drinks || [];
+        if (drinks.some(drink => !drink || typeof drink !== 'object' || Array.isArray(drink) ||
+            typeof drink.idDrink !== 'string' || !drink.idDrink.trim() ||
+            typeof drink.strDrink !== 'string' || !drink.strDrink.trim() ||
+            Array.from({ length: 15 }, (_, index) => drink[`strIngredient${index + 1}`])
+                .some(value => value != null && typeof value !== 'string'))) {
+            throw new Error('Unexpected recipe data');
+        }
+        // A null/empty response is cached as a successful letter, never as a failure.
+        recipeLetterCache.set(letter, drinks);
+        failedRecipeLetters.delete(letter);
+    } catch (error) {
+        failedRecipeLetters.set(letter, error.name === 'AbortError' ? 'Request timed out' : error.message);
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+function loadRecipeDataset(retryFailed) {
+    // Share in-flight work across searches. Successful letters are never fetched again.
+    if (recipeLoadPromise) return recipeLoadPromise;
+    const pendingLetters = recipeLetters.filter(letter => !recipeLetterCache.has(letter) &&
+        (retryFailed ? failedRecipeLetters.has(letter) : !failedRecipeLetters.has(letter)));
+    recipeLoadProgress = { completed: 0, total: pendingLetters.length, retrying: retryFailed };
+    recipeLoadPromise = (async () => {
+        let nextLetter = 0;
+        async function worker() {
+            while (nextLetter < pendingLetters.length) {
+                const letter = pendingLetters[nextLetter++];
+                await retrieveRecipeLetter(letter);
+                recipeLoadProgress.completed++;
+                recipeProgressListener?.();
+            }
+        }
+        await Promise.all(Array.from({ length: Math.min(3, pendingLetters.length) }, worker));
+    })().finally(() => { recipeLoadPromise = null; });
+    return recipeLoadPromise;
+}
+
+function updateRecipeDatasetStatus(loading) {
+    const count = getRetrievedRecipes().length;
+    const loadedLetters = recipeLetterCache.size;
+    const failures = recipeLetters.filter(letter => failedRecipeLetters.has(letter));
+    const total = recipeLetters.length;
+    if (loading) {
+        recipeDatasetStatus.dataset.state = 'loading';
+        const progress = recipeLoadProgress.retrying
+            ? `Retrying failed letters: ${recipeLoadProgress.completed}/${recipeLoadProgress.total} retry requests checked`
+            : `Loading recipes through A–Z requests: ${loadedLetters + failures.length}/${total} letters checked`;
+        recipeDatasetStatus.textContent = `${progress}; ${count} unique recipes loaded.${failures.length ? ` Failed letters so far: ${failures.join(', ').toUpperCase()}.` : ''}`;
+    } else {
+        recipeDatasetStatus.dataset.state = failures.length ? (loadedLetters ? 'partial' : 'error') : '';
+        const prefix = failures.length ? (loadedLetters ? 'Partial results: ' : 'Loading failed: ') : '';
+        recipeDatasetStatus.textContent = `${prefix}${count} unique recipes loaded through A–Z requests (${loadedLetters}/${total} letters retrieved).${failures.length ? ` Failed letters: ${failures.join(', ').toUpperCase()}.` : ''}`;
+    }
+    recipeDatasetRetry.hidden = loading || !failures.length;
+}
+
+recipeDatasetRetry.addEventListener('click', () => findByIngredients(true));
 
 function createComparisonCard(drink) {
     const card = makeElement('article', '', 'comparison-card');
@@ -622,7 +714,7 @@ function createBuyingRecommendations(oneIngredientAway) {
     section.setAttribute('aria-labelledby', heading.id);
     section.append(
         heading,
-        makeElement('p', 'Based only on the retrieved S-name recipe sample.', 'hint')
+        makeElement('p', 'Based on recipes retrieved through A–Z requests.', 'hint')
     );
     if (recommendations.length) {
         const list = makeElement('ul');
@@ -632,7 +724,7 @@ function createBuyingRecommendations(oneIngredientAway) {
         }
         section.append(list);
     } else {
-        section.append(makeElement('p', 'No single ingredient can unlock another cocktail in the current S-name sample.', 'hint'));
+        section.append(makeElement('p', 'No single ingredient can unlock another cocktail among the retrieved recipes.', 'hint'));
     }
     return section;
 }
@@ -693,10 +785,10 @@ function renderComparisonGroups(comparisons) {
     comparisonSection.hidden = false;
 }
 
-async function findByIngredients() {
+async function findByIngredients(retryFailed = false) {
     resetComparison();
     if (!addedIngredients.size) {
-        setComparisonStatus('Add at least one ingredient before comparing the S-name recipe sample.', 'error');
+        setComparisonStatus('Add at least one ingredient before comparing recipes.', 'error');
         ingredientInput.focus();
         resultNavigation.complete('ingredients');
         return;
@@ -704,30 +796,32 @@ async function findByIngredients() {
 
     const requestId = latestComparisonRequest;
     const selectedIngredients = new Set([...addedIngredients].map(normalizeIngredient));
-    const controller = new AbortController();
-    comparisonController = controller;
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const isCurrent = () => requestId === latestComparisonRequest && searchMode === 'ingredients';
+    recipeProgressListener = () => {
+        if (isCurrent()) updateRecipeDatasetStatus(true);
+    };
     findCocktails.disabled = true;
+    recipeDatasetRetry.disabled = true;
     comparisonSection.setAttribute('aria-busy', 'true');
-    setComparisonStatus('Loading the S-name recipe sample and comparing ingredients…', 'loading');
+    setComparisonStatus('Loading recipes and comparing your ingredients…', 'loading');
 
     try {
-        // Always use our backend for this prototype, including local Vercel development.
-        const response = await fetch('/api/cocktails?letter=s', { signal: controller.signal });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        if (requestId !== latestComparisonRequest) return;
-        if (!data || (data.drinks !== null && !Array.isArray(data.drinks))) {
-            throw new Error('Unexpected API response');
-        }
-        const drinks = data.drinks || [];
-        if (!drinks.length) {
-            renderComparisonGroups([]);
-            setComparisonStatus('No recipes were returned for the S-name recipe sample. Please try again.');
+        const loading = loadRecipeDataset(retryFailed);
+        updateRecipeDatasetStatus(true);
+        await loading;
+        if (!isCurrent()) return;
+        const drinks = getRetrievedRecipes();
+        updateRecipeDatasetStatus(false);
+        if (!recipeLetterCache.size) {
+            setComparisonStatus('Unable to load recipes through A–Z requests. Retry the failed letters.', 'error');
             return;
         }
-        if (drinks.some(drink => !drink || typeof drink !== 'object' || Array.isArray(drink))) {
-            throw new Error('Unexpected recipe data');
+        if (!drinks.length) {
+            renderComparisonGroups([]);
+            setComparisonStatus(failedRecipeLetters.size
+                ? 'No recipes were returned by the successful A–Z requests. Retry the failed letters to check more recipes.'
+                : 'No recipes were returned by the A–Z requests. Try again later.');
+            return;
         }
         indexRecipeIngredients(drinks);
         // Keep all retrieved recipes intact; relevance applies only to recommendations.
@@ -742,16 +836,14 @@ async function findByIngredients() {
             ? `${comparisons.length} ${comparisons.length === 1 ? 'cocktail' : 'cocktails'} using your ingredients, sorted by missing ingredients.`
             : 'None of the recipes currently searched use your selected ingredients. Try adding another ingredient.');
     } catch (error) {
-        if (requestId !== latestComparisonRequest) return;
-        setComparisonStatus(error.name === 'AbortError'
-            ? 'The S-name recipe sample request timed out. Please try again.'
-            : 'Unable to load the S-name recipe sample. Check your connection and make sure the /api/cocktails backend is running, then try again.', 'error');
+        if (!isCurrent()) return;
+        setComparisonStatus('Unable to compare the retrieved recipes. Please try again.', 'error');
     } finally {
-        clearTimeout(timeout);
-        if (requestId === latestComparisonRequest) {
+        if (isCurrent()) {
             comparisonSection.setAttribute('aria-busy', 'false');
             findCocktails.disabled = false;
-            comparisonController = null;
+            recipeDatasetRetry.disabled = false;
+            recipeProgressListener = null;
             resultNavigation.complete('ingredients');
         }
     }

@@ -130,6 +130,11 @@ input[aria-invalid='true'] { border-color: #eda18b; }
 /* Announce routine chip updates without adding another visible line of text. */
 #ingredient-status[data-state=''] { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 #comparison-status:empty { display: none; }
+#recipe-dataset-status { margin: 0 0 12px; }
+#recipe-dataset-status:empty { display: none; }
+#recipe-dataset-status[data-state='loading'], #recipe-dataset-status[data-state='partial'] { color: var(--accent-hover); }
+#recipe-dataset-status[data-state='error'] { color: #eda18b; }
+#recipe-dataset-retry { margin: 0 0 20px; }
 .results-area {
     border-top: 1px solid rgba(229, 173, 88, .28);
     background: #090807;
