@@ -180,6 +180,7 @@ body.recipe-open { overflow: hidden; }
 .instructions { white-space: pre-line; margin: 0; }
 .dialog-close { position: absolute; top: 12px; right: 12px; width: 44px; min-height: 44px; padding: 0; font-size: 1.5rem; line-height: 1; }
 footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 60px; border-top: 1px solid var(--border); padding-top: 22px; font-size: .72rem; color: var(--text-secondary); }
+footer .footer-credit { flex-basis: 100%; }
 a { color: var(--accent-hover); text-underline-offset: 4px; }
 /* Result navigation occupies its own gutter, outside the card grid. */
 .results-area :is(h2, h3, [role='status'], section) { scroll-margin-top: 2rem; }

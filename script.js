@@ -11,6 +11,7 @@ let latestRequest = 0;
 
 const ingredientInput = input;
 const ingredientList = document.querySelector('#ingredient-list');
+const ingredientMatchingHint = document.querySelector('#ingredient-matching-hint');
 const ingredientStatus = document.querySelector('#ingredient-status');
 const ingredientLoadStatus = document.querySelector('#ingredient-load-status');
 const ingredientRetry = document.querySelector('#ingredient-retry');
@@ -89,7 +90,7 @@ function setSearchMode(mode) {
     previousIngredientInput = input.value;
     input.removeAttribute('aria-invalid');
     input.placeholder = byIngredients ? 'Try Gin, Lime, or Vodka' : 'Enter a cocktail name, e.g. Margarita';
-    input.setAttribute('aria-describedby', byIngredients ? 'search-hint ingredient-load-status ingredient-status' : 'search-hint');
+    input.setAttribute('aria-describedby', byIngredients ? 'search-hint ingredient-load-status ingredient-matching-hint ingredient-status' : 'search-hint');
     for (const [attribute, value] of Object.entries({ role: 'combobox', 'aria-autocomplete': 'list', 'aria-controls': 'ingredient-suggestions', 'aria-expanded': 'false' })) {
         if (byIngredients) input.setAttribute(attribute, value);
         else input.removeAttribute(attribute);
@@ -343,6 +344,7 @@ function addIngredient(value) {
     removeButton.addEventListener('click', () => {
         invalidateIngredientValidation();
         addedIngredients.delete(key);
+        updateIngredientMatchingHint();
         resetComparison();
         chip.remove();
         ingredientStatus.dataset.state = '';
@@ -353,7 +355,13 @@ function addIngredient(value) {
     });
     chip.append(makeElement('span', ingredient), removeButton);
     ingredientList.append(chip);
+    updateIngredientMatchingHint();
     return 'added';
+}
+
+function updateIngredientMatchingHint() {
+    ingredientMatchingHint.hidden = ![...addedIngredients].some(ingredient =>
+        normalizeIngredient(ingredient) === 'absolut vodka');
 }
 
 function commitIngredients(keepUnfinished = false) {
@@ -526,14 +534,20 @@ function ingredientKey(value) {
     return cleanText(value).toLowerCase();
 }
 
+function matchesRecipeIngredient(requirement, selectedIngredients) {
+    // Comparison only: this explicit brand-to-generic rule never changes validation.
+    return selectedIngredients.has(requirement) ||
+        (requirement === 'vodka' && selectedIngredients.has('absolut vodka'));
+}
+
 function compareRecipeIngredients(drink, selectedIngredients) {
     const recipeIngredients = new Set();
     for (let i = 1; i <= 15; i++) {
         const ingredient = normalizeIngredient(drink[`strIngredient${i}`]);
         if (ingredient) recipeIngredients.add(ingredient);
     }
-    const matchedIngredients = [...recipeIngredients].filter(ingredient => selectedIngredients.has(ingredient));
-    const missingIngredients = [...recipeIngredients].filter(ingredient => !selectedIngredients.has(ingredient));
+    const matchedIngredients = [...recipeIngredients].filter(ingredient => matchesRecipeIngredient(ingredient, selectedIngredients));
+    const missingIngredients = [...recipeIngredients].filter(ingredient => !matchesRecipeIngredient(ingredient, selectedIngredients));
     return {
         ...drink,
         matchedIngredients,

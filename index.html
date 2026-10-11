@@ -5,13 +5,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cocktail Finder</title>
-    <meta name="cocktail-finder-build" content="ingredient-relevance-1">
+    <meta name="cocktail-finder-build" content="ingredient-matching-1">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=search-accordion-1">
+    <link rel="stylesheet" href="style.css?v=ingredient-matching-1">
     <script src="result-navigation.js" defer></script>
-    <script src="script.js?v=ingredient-relevance-1" defer></script>
+    <script src="script.js?v=ingredient-matching-1" defer></script>
 </head>
 
 <body>
@@ -38,7 +38,7 @@
                                     <div class="ingredient-input-wrapper">
                                         <input id="search-input" name="query" type="text" autocomplete="off"
                                             role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ingredient-suggestions"
-                                            placeholder="Try Gin, Lime, or Vodka" aria-describedby="search-hint ingredient-load-status ingredient-status">
+                                            placeholder="Try Gin, Lime, or Vodka" aria-describedby="search-hint ingredient-load-status ingredient-matching-hint ingredient-status">
                                         <ul id="ingredient-suggestions" class="ingredient-suggestions" role="listbox" aria-label="Ingredient suggestions" hidden></ul>
                                         <span id="suggestion-status" class="visually-hidden" role="status" aria-live="polite"></span>
                                     </div>
@@ -49,6 +49,7 @@
                                     <p id="ingredient-load-status" class="hint" role="status" aria-live="polite" aria-atomic="true">Loading ingredient list…</p>
                                     <button id="ingredient-retry" class="ingredient-retry" type="button" hidden>Retry ingredient list</button>
                                     <ul id="ingredient-list" class="ingredient-list" aria-label="Added ingredients" role="list"></ul>
+                                    <p id="ingredient-matching-hint" class="hint" aria-live="polite" hidden>Absolut Vodka also matches recipes requiring Vodka.</p>
                                     <p id="ingredient-status" class="hint" role="status" aria-live="polite" aria-atomic="true"></p>
                                     <button id="ingredient-verify-retry" class="ingredient-retry" type="button" hidden>Retry ingredient check</button>
                                 </div>
@@ -84,7 +85,11 @@
                     </section>
                 </div>
                 <noscript>Please enable JavaScript to search for cocktail recipes.</noscript>
-                <footer><span>Cocktail Finder</span><span>Recipe data and images from <a href="https://www.thecocktaildb.com/">TheCocktailDB</a>.</span></footer>
+                <footer>
+                    <span>Cocktail Finder</span>
+                    <span>Recipe data and images from <a href="https://www.thecocktaildb.com/">TheCocktailDB</a>.</span>
+                    <span class="footer-credit">Designed and developed by Reyin Xu</span>
+                </footer>
             </div>
         </div>
     </main>
