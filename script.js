@@ -654,6 +654,7 @@ function renderComparisonGroups(comparisons) {
     for (const drink of comparisons) {
         groups[Math.min(drink.missingCount, 3)].drinks.push(drink);
     }
+    const closestGroupIndex = groups.findIndex((group, index) => index > 0 && group.drinks.length > 0);
 
     const fragment = document.createDocumentFragment();
     groups.forEach((group, index) => {
@@ -670,6 +671,17 @@ function renderComparisonGroups(comparisons) {
             const grid = makeElement('div', '', 'results-grid');
             for (const drink of group.drinks) grid.append(createComparisonCard(drink));
             section.append(grid);
+        } else if (index === 0 && closestGroupIndex > 0) {
+            const closestButton = makeElement('button', 'View closest matches', 'closest-matches-button');
+            closestButton.type = 'button';
+            closestButton.addEventListener('click', () => {
+                resultNavigation.navigateToSection(document.querySelector(`#comparison-group-${closestGroupIndex}`));
+            });
+            section.append(
+                makeElement('p', 'You can’t make any of these cocktails yet.', 'comparison-empty-message'),
+                makeElement('p', 'Check the closest matches to see what’s missing, or add more ingredients you have.', 'hint'),
+                closestButton
+            );
         } else {
             section.append(makeElement('p', 'No cocktails in this group.', 'hint'));
         }

@@ -141,6 +141,9 @@ input[aria-invalid='true'] { border-color: #eda18b; }
 #status[data-state='loading'], #comparison-status[data-state='loading'] { color: var(--accent-hover); }
 .comparison-group { margin-top: 38px; padding-top: 28px; border-top: 1px solid var(--border); }
 .comparison-group > h3 { margin: 0 0 8px; }
+.comparison-empty-message { margin: 0; font-size: .9rem; }
+.closest-matches-button { margin-top: 18px; background: transparent; color: var(--accent-hover); border-color: var(--border); }
+.closest-matches-button:hover { background: var(--surface-light); border-color: var(--accent); }
 .group-count { display: inline-block; vertical-align: middle; font-family: 'Inter', system-ui, sans-serif; font-size: .68rem; line-height: 1.5; margin-left: 14px; padding: 4px 9px; border: 1px solid var(--border); border-radius: 3px; color: var(--text-secondary); }
 .section-caption { margin: 0 0 22px; color: var(--accent-hover); font-size: .66rem; letter-spacing: .15em; text-transform: uppercase; }
 .results-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: stretch; grid-auto-rows: 1fr; }
