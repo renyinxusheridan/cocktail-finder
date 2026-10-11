@@ -44,6 +44,10 @@ let latestComparisonRequest = 0;
 
 const ingredientModeButton = document.querySelector('#mode-ingredients');
 const nameModeButton = document.querySelector('#mode-name');
+const searchPanels = [document.querySelector('#ingredient-search-panel'), document.querySelector('#name-search-panel')];
+const accordionReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+let accordionAnimations = [];
+let accordionTransitionVersion = 0;
 const heroEyebrow = document.querySelector('#hero-eyebrow');
 const heroDescription = document.querySelector('#hero-description');
 const searchLabel = document.querySelector('#search-label');
@@ -56,6 +60,12 @@ let searchMode = 'ingredients';
 
 function setSearchMode(mode) {
     if (mode === searchMode) return;
+    // Prevent the browser from following a moving accordion header as a scroll anchor.
+    document.documentElement.classList.add('is-switching-search');
+    const previousHeights = searchPanels.map(panel => panel.getBoundingClientRect().height);
+    accordionTransitionVersion++;
+    for (const animation of accordionAnimations) animation.cancel();
+    accordionAnimations = [];
     invalidateIngredientValidation();
     closeSuggestions();
     resultNavigation.reset();
@@ -94,13 +104,54 @@ function setSearchMode(mode) {
         : 'Find a cocktail by name and explore its recipe.';
     findCocktails.textContent = byIngredients ? 'Find Cocktails' : 'Search Cocktails';
     findCocktails.disabled = false;
-    ingredientModeButton.hidden = byIngredients;
-    nameModeButton.hidden = !byIngredients;
+    for (const [button, expanded] of [[ingredientModeButton, byIngredients], [nameModeButton, !byIngredients]]) {
+        button.setAttribute('aria-expanded', String(expanded));
+        // The open header remains focusable, but cannot close the only open section.
+        button.setAttribute('aria-disabled', String(expanded));
+        button.closest('.search-mode-section').classList.toggle('is-expanded', expanded);
+    }
     ingredientControls.hidden = !byIngredients;
     ingredientOutput.hidden = !byIngredients;
     nameOutput.hidden = byIngredients;
     resultNavigation.refresh(mode);
-    input.focus({ preventScroll: true });
+    showSearchPanel(byIngredients ? 0 : 1, previousHeights);
+}
+
+function showSearchPanel(activeIndex, previousHeights) {
+    const version = accordionTransitionVersion;
+    for (const [index, panel] of searchPanels.entries()) {
+        panel.hidden = false;
+        panel.inert = index !== activeIndex;
+        panel.setAttribute('aria-hidden', String(index !== activeIndex));
+        panel.classList.remove('is-animating');
+    }
+    // Reparent the same form: input, chip nodes, and all event handlers survive.
+    searchPanels[activeIndex].append(form);
+    const targetHeight = searchPanels[activeIndex].getBoundingClientRect().height;
+    function finish() {
+        if (version !== accordionTransitionVersion) return;
+        accordionAnimations = [];
+        for (const [index, panel] of searchPanels.entries()) {
+            panel.classList.remove('is-animating');
+            panel.hidden = index !== activeIndex;
+        }
+        updateSuggestions();
+        // Settle the natural height before restoring ordinary page scroll anchoring.
+        searchPanels[activeIndex].getBoundingClientRect();
+        document.documentElement.classList.remove('is-switching-search');
+    }
+    if (accordionReducedMotion.matches) {
+        finish();
+        return;
+    }
+    accordionAnimations = searchPanels.map((panel, index) => {
+        panel.classList.add('is-animating');
+        return panel.animate([
+            { height: `${previousHeights[index]}px`, opacity: index === activeIndex ? 0 : 1 },
+            { height: `${index === activeIndex ? targetHeight : 0}px`, opacity: index === activeIndex ? 1 : 0 }
+        ], { duration: 240, easing: 'ease-in-out' });
+    });
+    Promise.all(accordionAnimations.map(animation => animation.finished)).then(finish, () => {});
 }
 
 ingredientModeButton.addEventListener('click', () => setSearchMode('ingredients'));
@@ -232,7 +283,7 @@ function closeSuggestions() {
 
 function updateSuggestions() {
     closeSuggestions();
-    if (searchMode !== 'ingredients' || document.activeElement !== input) return;
+    if (searchMode !== 'ingredients' || accordionAnimations.length || document.activeElement !== input) return;
     const query = ingredientKey(input.value.split(',').pop());
     const choices = verificationSuggestionContext?.draft === input.value ? verificationSuggestionContext : null;
     if (!query && !choices) return;
@@ -253,8 +304,8 @@ function updateSuggestions() {
         ingredientSuggestions.append(option);
     });
     ingredientSuggestions.hidden = false;
-    // The hero clips its decorative background; keep the popup inside that boundary.
-    const availableHeight = document.querySelector('#search-area').getBoundingClientRect().bottom - input.getBoundingClientRect().bottom - 12;
+    // Keep the popup above the collapsed name header so that header stays reachable.
+    const availableHeight = nameModeButton.getBoundingClientRect().top - input.getBoundingClientRect().bottom - 12;
     ingredientSuggestions.style.maxHeight = `${Math.max(44, Math.min(272, availableHeight))}px`;
     input.setAttribute('aria-expanded', 'true');
     suggestionStatus.textContent = `${suggestedIngredients.length} suggestions available. Use Up and Down arrows to browse, then Enter to select.`;
