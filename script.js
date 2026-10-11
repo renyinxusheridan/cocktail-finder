@@ -12,6 +12,16 @@ let latestRequest = 0;
 const ingredientInput = input;
 const ingredientList = document.querySelector('#ingredient-list');
 const ingredientStatus = document.querySelector('#ingredient-status');
+const ingredientLoadStatus = document.querySelector('#ingredient-load-status');
+const ingredientRetry = document.querySelector('#ingredient-retry');
+const ingredientSuggestions = document.querySelector('#ingredient-suggestions');
+const suggestionStatus = document.querySelector('#suggestion-status');
+const ingredientNames = new Map();
+let ingredientLoadState = 'loading';
+let ingredientLoadPromise;
+let suggestedIngredients = [];
+let activeSuggestion = -1;
+const unrecognizedIngredientMessage = 'We couldn’t find this ingredient in our list. Check the spelling or choose a suggestion.';
 const addedIngredients = new Set();
 const findCocktails = document.querySelector('#search-submit');
 const comparisonStatus = document.querySelector('#comparison-status');
@@ -33,6 +43,7 @@ let searchMode = 'ingredients';
 
 function setSearchMode(mode) {
     if (mode === searchMode) return;
+    closeSuggestions();
     resultNavigation.reset();
     inputDrafts[searchMode] = input.value;
     // Cancel pending work so an old response cannot update the shared controls.
@@ -53,10 +64,14 @@ function setSearchMode(mode) {
     input.value = inputDrafts[mode];
     input.removeAttribute('aria-invalid');
     input.placeholder = byIngredients ? 'Enter ingredients, separated by commas' : 'Search for a cocktail';
-    input.setAttribute('aria-describedby', byIngredients ? 'search-hint ingredient-status' : 'search-hint');
+    input.setAttribute('aria-describedby', byIngredients ? 'search-hint ingredient-load-status ingredient-status' : 'search-hint');
+    for (const [attribute, value] of Object.entries({ role: 'combobox', 'aria-autocomplete': 'list', 'aria-controls': 'ingredient-suggestions', 'aria-expanded': 'false' })) {
+        if (byIngredients) input.setAttribute(attribute, value);
+        else input.removeAttribute(attribute);
+    }
     searchLabel.textContent = byIngredients ? 'Your ingredients' : 'Cocktail name';
     searchHint.textContent = byIngredients
-        ? 'Press Enter or type a comma to add ingredients.'
+        ? 'Choose a suggestion, or press Enter or type a comma to add an ingredient. Use ↑/↓ to browse suggestions.'
         : 'Try Margarita or Mojito.';
     findCocktails.textContent = byIngredients ? 'Find Cocktails' : 'Search';
     findCocktails.disabled = false;
@@ -71,10 +86,116 @@ function setSearchMode(mode) {
 ingredientModeButton.addEventListener('click', () => setSearchMode('ingredients'));
 nameModeButton.addEventListener('click', () => setSearchMode('name'));
 
+async function loadIngredientNames() {
+    // One successful list per page; concurrent calls share the same request.
+    if (ingredientLoadState === 'ready') return;
+    if (ingredientLoadPromise) return ingredientLoadPromise;
+    ingredientLoadState = 'loading';
+    ingredientLoadStatus.dataset.state = 'loading';
+    ingredientLoadStatus.textContent = 'Loading ingredient list… You can type while we load it.';
+    ingredientRetry.hidden = true;
+    input.removeAttribute('aria-invalid');
+    ingredientStatus.textContent = '';
+    ingredientSuggestions.setAttribute('aria-busy', 'true');
+    ingredientLoadPromise = (async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        try {
+            const response = await fetch('/api/cocktails?ingredients=list', { signal: controller.signal });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            if (!Array.isArray(data?.drinks) || !data.drinks.length ||
+                data.drinks.some(item => typeof item?.strIngredient1 !== 'string' || !item.strIngredient1.trim())) {
+                throw new Error('Unexpected ingredient data');
+            }
+            for (const item of data.drinks) {
+                const key = normalizeIngredient(item.strIngredient1);
+                if (!ingredientNames.has(key)) ingredientNames.set(key, item.strIngredient1);
+            }
+            ingredientLoadState = 'ready';
+            ingredientLoadStatus.dataset.state = '';
+            ingredientLoadStatus.textContent = 'Ingredient list ready. Start typing to see suggestions.';
+            updateSuggestions();
+        } catch (error) {
+            ingredientLoadState = 'error';
+            ingredientLoadStatus.dataset.state = 'error';
+            ingredientLoadStatus.textContent = 'Unable to load the ingredient list. Retry to check and add ingredients.';
+            ingredientRetry.hidden = false;
+            closeSuggestions();
+        } finally {
+            clearTimeout(timeout);
+            ingredientSuggestions.setAttribute('aria-busy', 'false');
+            ingredientLoadPromise = null;
+        }
+    })();
+    return ingredientLoadPromise;
+}
+
+ingredientRetry.addEventListener('click', () => {
+    input.focus();
+    loadIngredientNames();
+});
+
+function closeSuggestions() {
+    ingredientSuggestions.hidden = true;
+    ingredientSuggestions.replaceChildren();
+    suggestedIngredients = [];
+    activeSuggestion = -1;
+    if (searchMode === 'ingredients') input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+    suggestionStatus.textContent = '';
+}
+
+function updateSuggestions() {
+    closeSuggestions();
+    if (searchMode !== 'ingredients' || ingredientLoadState !== 'ready' || document.activeElement !== input) return;
+    const query = normalizeIngredient(input.value.split(',').pop());
+    if (!query) return;
+    suggestedIngredients = [...ingredientNames.entries()]
+        .filter(([key]) => key.includes(query) && !addedIngredients.has(key))
+        .sort(([a], [b]) => Number(b.startsWith(query)) - Number(a.startsWith(query)) || a.localeCompare(b))
+        .slice(0, 6)
+        .map(([, name]) => name);
+    if (!suggestedIngredients.length) return;
+    suggestedIngredients.forEach((name, index) => {
+        const option = makeElement('li', name);
+        option.id = `ingredient-suggestion-${index}`;
+        option.setAttribute('role', 'option');
+        option.setAttribute('aria-selected', 'false');
+        // Keep focus on the combobox when clicking an option.
+        option.addEventListener('pointerdown', event => event.preventDefault());
+        option.addEventListener('click', () => selectSuggestion(name));
+        ingredientSuggestions.append(option);
+    });
+    ingredientSuggestions.hidden = false;
+    // The hero clips its decorative background; keep the popup inside that boundary.
+    const availableHeight = document.querySelector('#search-area').getBoundingClientRect().bottom - input.getBoundingClientRect().bottom - 12;
+    ingredientSuggestions.style.maxHeight = `${Math.max(44, Math.min(272, availableHeight))}px`;
+    input.setAttribute('aria-expanded', 'true');
+    suggestionStatus.textContent = `${suggestedIngredients.length} suggestions available. Use Up and Down arrows to browse, then Enter to select.`;
+}
+
+function activateSuggestion(index) {
+    activeSuggestion = index;
+    [...ingredientSuggestions.children].forEach((option, i) => option.setAttribute('aria-selected', String(i === index)));
+    input.setAttribute('aria-activedescendant', ingredientSuggestions.children[index].id);
+    ingredientSuggestions.children[index].scrollIntoView({ block: 'nearest' });
+}
+
+function selectSuggestion(name) {
+    const parts = input.value.split(',');
+    parts[parts.length - 1] = name;
+    input.value = parts.join(',');
+    commitIngredients();
+    input.focus();
+}
+
 function addIngredient(value) {
-    const ingredient = value.trim().replace(/\s+/g, ' ');
-    const key = normalizeIngredient(ingredient);
-    if (!key || addedIngredients.has(key)) return false;
+    const key = normalizeIngredient(value);
+    if (ingredientLoadState !== 'ready') return 'unavailable';
+    const ingredient = ingredientNames.get(key);
+    if (!ingredient) return 'invalid';
+    if (addedIngredients.has(key)) return 'duplicate';
     addedIngredients.add(key);
     resetComparison();
     const chip = makeElement('li', '', 'ingredient-chip');
@@ -89,26 +210,41 @@ function addIngredient(value) {
         ingredientStatus.textContent = `${ingredient} removed.`;
         input.removeAttribute('aria-invalid');
         input.focus();
+        updateSuggestions();
     });
     chip.append(makeElement('span', ingredient), removeButton);
     ingredientList.append(chip);
-    return true;
+    return 'added';
 }
 
 function commitIngredients(keepUnfinished = false) {
+    if (ingredientLoadState !== 'ready') {
+        // Loading/network failures are not spelling errors. Preserve the entire draft.
+        input.removeAttribute('aria-invalid');
+        closeSuggestions();
+        return false;
+    }
     const parts = input.value.split(',');
     const unfinished = keepUnfinished ? parts.pop() : '';
     const added = [];
+    const invalid = [];
     let duplicates = 0;
     for (const part of parts) {
         if (!part.trim()) continue;
-        if (addIngredient(part)) added.push(part.trim().replace(/\s+/g, ' '));
-        else duplicates++;
+        const outcome = addIngredient(part);
+        if (outcome === 'added') added.push(ingredientNames.get(normalizeIngredient(part)));
+        else if (outcome === 'duplicate') duplicates++;
+        else invalid.push(part.trim());
     }
-    input.value = unfinished;
+    // Retain failed entries and any unfinished tail for editing, including batch input.
+    input.value = [...invalid, ...(keepUnfinished ? [unfinished] : [])].join(',');
     input.removeAttribute('aria-invalid');
     ingredientStatus.dataset.state = '';
-    if (added.length) {
+    if (invalid.length) {
+        ingredientStatus.textContent = unrecognizedIngredientMessage;
+        ingredientStatus.dataset.state = 'error';
+        input.setAttribute('aria-invalid', 'true');
+    } else if (added.length) {
         ingredientStatus.textContent = `Added: ${added.join(', ')}.${duplicates ? ' Already selected ingredients were skipped.' : ''}`;
     } else if (duplicates) {
         ingredientStatus.dataset.state = 'notice';
@@ -118,11 +254,27 @@ function commitIngredients(keepUnfinished = false) {
         ingredientStatus.dataset.state = 'error';
         input.setAttribute('aria-invalid', 'true');
     }
+    updateSuggestions();
+    return invalid.length === 0;
 }
 
 input.addEventListener('keydown', (event) => {
-    if (event.isComposing || searchMode !== 'ingredients' || event.key !== 'Enter') return;
-    if (input.value.trim()) {
+    if (event.isComposing || searchMode !== 'ingredients') return;
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        closeSuggestions();
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (ingredientSuggestions.hidden) updateSuggestions();
+        if (!suggestedIngredients.length) return;
+        const next = activeSuggestion === -1
+            ? (event.key === 'ArrowDown' ? 0 : suggestedIngredients.length - 1)
+            : (activeSuggestion + (event.key === 'ArrowDown' ? 1 : -1) + suggestedIngredients.length) % suggestedIngredients.length;
+        activateSuggestion(next);
+    } else if (event.key === 'Enter' && activeSuggestion >= 0) {
+        event.preventDefault();
+        selectSuggestion(suggestedIngredients[activeSuggestion]);
+    } else if (event.key === 'Enter' && input.value.trim()) {
         event.preventDefault();
         commitIngredients();
     }
@@ -134,20 +286,30 @@ input.addEventListener('input', (event) => {
     ingredientStatus.dataset.state = '';
     ingredientStatus.textContent = '';
     if (!event.isComposing && input.value.includes(',')) commitIngredients(true);
+    if (!event.isComposing) updateSuggestions();
 });
 input.addEventListener('compositionend', () => {
     if (searchMode === 'ingredients' && input.value.includes(',')) commitIngredients(true);
+    updateSuggestions();
 });
+input.addEventListener('focus', updateSuggestions);
+input.addEventListener('blur', closeSuggestions);
 
 form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (searchMode === 'ingredients') {
-        if (input.value.trim()) commitIngredients();
+        if (input.value.trim() && !commitIngredients()) {
+            input.focus();
+            return;
+        }
+        closeSuggestions();
         await findByIngredients();
     } else {
         await searchByName();
     }
 });
+
+loadIngredientNames();
 
 function cleanText(value) {
     return typeof value === 'string' ? value.trim() : '';
