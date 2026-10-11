@@ -14,13 +14,24 @@ const ingredientList = document.querySelector('#ingredient-list');
 const ingredientStatus = document.querySelector('#ingredient-status');
 const ingredientLoadStatus = document.querySelector('#ingredient-load-status');
 const ingredientRetry = document.querySelector('#ingredient-retry');
+const ingredientVerifyRetry = document.querySelector('#ingredient-verify-retry');
 const ingredientSuggestions = document.querySelector('#ingredient-suggestions');
 const suggestionStatus = document.querySelector('#suggestion-status');
 const ingredientNames = new Map();
+const ingredientSearchCache = new Map();
+let ingredientValidationVersion = 0;
+let ingredientVerificationController;
+let ingredientCommitPromise;
+let ingredientCommitDraft;
+let ingredientCommitKeepUnfinished;
+let verificationSuggestionContext;
+let previousIngredientInput = '';
+let compositionDraft = '';
 let ingredientLoadState = 'loading';
 let ingredientLoadPromise;
 let suggestedIngredients = [];
 let activeSuggestion = -1;
+let activeSuggestionDraft = '';
 const unrecognizedIngredientMessage = 'We couldn’t find this ingredient in our list. Check the spelling or choose a suggestion.';
 const addedIngredients = new Set();
 const findCocktails = document.querySelector('#search-submit');
@@ -43,6 +54,7 @@ let searchMode = 'ingredients';
 
 function setSearchMode(mode) {
     if (mode === searchMode) return;
+    invalidateIngredientValidation();
     closeSuggestions();
     resultNavigation.reset();
     inputDrafts[searchMode] = input.value;
@@ -62,6 +74,7 @@ function setSearchMode(mode) {
     searchMode = mode;
     const byIngredients = mode === 'ingredients';
     input.value = inputDrafts[mode];
+    previousIngredientInput = input.value;
     input.removeAttribute('aria-invalid');
     input.placeholder = byIngredients ? 'Enter ingredients, separated by commas' : 'Search for a cocktail';
     input.setAttribute('aria-describedby', byIngredients ? 'search-hint ingredient-load-status ingredient-status' : 'search-hint');
@@ -94,8 +107,6 @@ async function loadIngredientNames() {
     ingredientLoadStatus.dataset.state = 'loading';
     ingredientLoadStatus.textContent = 'Loading ingredient list… You can type while we load it.';
     ingredientRetry.hidden = true;
-    input.removeAttribute('aria-invalid');
-    ingredientStatus.textContent = '';
     ingredientSuggestions.setAttribute('aria-busy', 'true');
     ingredientLoadPromise = (async () => {
         const controller = new AbortController();
@@ -108,18 +119,15 @@ async function loadIngredientNames() {
                 data.drinks.some(item => typeof item?.strIngredient1 !== 'string' || !item.strIngredient1.trim())) {
                 throw new Error('Unexpected ingredient data');
             }
-            for (const item of data.drinks) {
-                const key = normalizeIngredient(item.strIngredient1);
-                if (!ingredientNames.has(key)) ingredientNames.set(key, item.strIngredient1);
-            }
+            indexIngredientNames(data.drinks.map(item => item.strIngredient1));
             ingredientLoadState = 'ready';
             ingredientLoadStatus.dataset.state = '';
-            ingredientLoadStatus.textContent = 'Ingredient list ready. Start typing to see suggestions.';
+            ingredientLoadStatus.textContent = 'Ingredient suggestions ready. Other names are checked when you add them.';
             updateSuggestions();
         } catch (error) {
             ingredientLoadState = 'error';
             ingredientLoadStatus.dataset.state = 'error';
-            ingredientLoadStatus.textContent = 'Unable to load the ingredient list. Retry to check and add ingredients.';
+            ingredientLoadStatus.textContent = 'Unable to load the ingredient list. Retry for more suggestions; you can still enter names to check them.';
             ingredientRetry.hidden = false;
             closeSuggestions();
         } finally {
@@ -136,11 +144,80 @@ ingredientRetry.addEventListener('click', () => {
     loadIngredientNames();
 });
 
+ingredientVerifyRetry.addEventListener('click', () => {
+    input.focus();
+    commitIngredients(ingredientCommitKeepUnfinished);
+});
+
+function indexIngredientNames(names) {
+    for (const name of names) {
+        const key = ingredientKey(name);
+        if (key && !ingredientNames.has(key)) ingredientNames.set(key, name);
+    }
+}
+
+function indexRecipeIngredients(drinks) {
+    for (const drink of drinks) {
+        if (!drink || typeof drink !== 'object') continue;
+        for (let i = 1; i <= 15; i++) {
+            const name = drink[`strIngredient${i}`];
+            if (typeof name === 'string') indexIngredientNames([name]);
+        }
+    }
+    updateSuggestions();
+}
+
+function invalidateIngredientValidation() {
+    ingredientValidationVersion++;
+    ingredientVerificationController?.abort();
+    ingredientVerificationController = null;
+    ingredientCommitPromise = null;
+    verificationSuggestionContext = null;
+    ingredientVerifyRetry.hidden = true;
+    ingredientStatus.dataset.state = '';
+    ingredientStatus.textContent = '';
+    input.removeAttribute('aria-invalid');
+    input.removeAttribute('aria-busy');
+}
+
+async function verifyIngredient(value, signal) {
+    const key = ingredientKey(value);
+    if (ingredientNames.has(key)) return { state: 'recognized' };
+    try {
+        let names = ingredientSearchCache.get(key);
+        if (!names) {
+            const url = new URL('/api/cocktails', window.location.origin);
+            url.searchParams.set('ingredient', value.trim());
+            const response = await fetch(url, { signal });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            if (!data || (data.ingredients !== null && !Array.isArray(data.ingredients)) ||
+                (Array.isArray(data.ingredients) && data.ingredients.some(item =>
+                    typeof item?.strIngredient !== 'string' || !item.strIngredient.trim()))) {
+                throw new Error('Unexpected ingredient search data');
+            }
+            if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+            names = [...new Map((data.ingredients || []).map(item =>
+                [ingredientKey(item.strIngredient), item.strIngredient])).values()];
+            ingredientSearchCache.set(key, names);
+            // Cache all returned names as choices, but never substitute one for the input.
+            indexIngredientNames(names);
+        }
+        return names.some(name => ingredientKey(name) === key)
+            ? { state: 'recognized' }
+            : { state: names.length ? 'choices' : 'invalid', names };
+    } catch (error) {
+        // Do not cache failures or turn a network/format failure into a spelling error.
+        return { state: 'request-error' };
+    }
+}
+
 function closeSuggestions() {
     ingredientSuggestions.hidden = true;
     ingredientSuggestions.replaceChildren();
     suggestedIngredients = [];
     activeSuggestion = -1;
+    activeSuggestionDraft = '';
     if (searchMode === 'ingredients') input.setAttribute('aria-expanded', 'false');
     input.removeAttribute('aria-activedescendant');
     suggestionStatus.textContent = '';
@@ -148,10 +225,11 @@ function closeSuggestions() {
 
 function updateSuggestions() {
     closeSuggestions();
-    if (searchMode !== 'ingredients' || ingredientLoadState !== 'ready' || document.activeElement !== input) return;
-    const query = normalizeIngredient(input.value.split(',').pop());
-    if (!query) return;
-    suggestedIngredients = [...ingredientNames.entries()]
+    if (searchMode !== 'ingredients' || document.activeElement !== input) return;
+    const query = ingredientKey(input.value.split(',').pop());
+    const choices = verificationSuggestionContext?.draft === input.value ? verificationSuggestionContext : null;
+    if (!query && !choices) return;
+    suggestedIngredients = choices ? choices.names.filter(name => !addedIngredients.has(ingredientKey(name))).slice(0, 6) : [...ingredientNames.entries()]
         .filter(([key]) => key.includes(query) && !addedIngredients.has(key))
         .sort(([a], [b]) => Number(b.startsWith(query)) - Number(a.startsWith(query)) || a.localeCompare(b))
         .slice(0, 6)
@@ -177,6 +255,7 @@ function updateSuggestions() {
 
 function activateSuggestion(index) {
     activeSuggestion = index;
+    activeSuggestionDraft = input.value;
     [...ingredientSuggestions.children].forEach((option, i) => option.setAttribute('aria-selected', String(i === index)));
     input.setAttribute('aria-activedescendant', ingredientSuggestions.children[index].id);
     ingredientSuggestions.children[index].scrollIntoView({ block: 'nearest' });
@@ -184,15 +263,16 @@ function activateSuggestion(index) {
 
 function selectSuggestion(name) {
     const parts = input.value.split(',');
-    parts[parts.length - 1] = name;
+    const index = verificationSuggestionContext?.draft === input.value ? verificationSuggestionContext.index : parts.length - 1;
+    parts[index] = name;
     input.value = parts.join(',');
+    previousIngredientInput = input.value;
     commitIngredients();
     input.focus();
 }
 
 function addIngredient(value) {
-    const key = normalizeIngredient(value);
-    if (ingredientLoadState !== 'ready') return 'unavailable';
+    const key = ingredientKey(value);
     const ingredient = ingredientNames.get(key);
     if (!ingredient) return 'invalid';
     if (addedIngredients.has(key)) return 'duplicate';
@@ -203,6 +283,7 @@ function addIngredient(value) {
     removeButton.type = 'button';
     removeButton.setAttribute('aria-label', `Remove ${ingredient}`);
     removeButton.addEventListener('click', () => {
+        invalidateIngredientValidation();
         addedIngredients.delete(key);
         resetComparison();
         chip.remove();
@@ -218,44 +299,91 @@ function addIngredient(value) {
 }
 
 function commitIngredients(keepUnfinished = false) {
-    if (ingredientLoadState !== 'ready') {
-        // Loading/network failures are not spelling errors. Preserve the entire draft.
-        input.removeAttribute('aria-invalid');
-        closeSuggestions();
-        return false;
+    const draft = input.value;
+    if (ingredientCommitPromise && ingredientCommitDraft === draft && ingredientCommitKeepUnfinished === keepUnfinished) {
+        return ingredientCommitPromise;
     }
-    const parts = input.value.split(',');
+    invalidateIngredientValidation();
+    const version = ingredientValidationVersion;
+    ingredientCommitDraft = draft;
+    ingredientCommitKeepUnfinished = keepUnfinished;
+    const parts = draft.split(',');
     const unfinished = keepUnfinished ? parts.pop() : '';
-    const added = [];
-    const invalid = [];
-    let duplicates = 0;
-    for (const part of parts) {
-        if (!part.trim()) continue;
-        const outcome = addIngredient(part);
-        if (outcome === 'added') added.push(ingredientNames.get(normalizeIngredient(part)));
-        else if (outcome === 'duplicate') duplicates++;
-        else invalid.push(part.trim());
+    const entries = parts.filter(part => part.trim()).map(part => ({ value: part.trim() }));
+    const controller = new AbortController();
+    ingredientVerificationController = controller;
+    const needsVerification = entries.some(entry => !ingredientNames.has(ingredientKey(entry.value)));
+    if (needsVerification) {
+        ingredientStatus.dataset.state = 'loading';
+        ingredientStatus.textContent = 'Checking ingredient names…';
+        input.setAttribute('aria-busy', 'true');
+        closeSuggestions();
     }
-    // Retain failed entries and any unfinished tail for editing, including batch input.
-    input.value = [...invalid, ...(keepUnfinished ? [unfinished] : [])].join(',');
-    input.removeAttribute('aria-invalid');
-    ingredientStatus.dataset.state = '';
-    if (invalid.length) {
-        ingredientStatus.textContent = unrecognizedIngredientMessage;
-        ingredientStatus.dataset.state = 'error';
-        input.setAttribute('aria-invalid', 'true');
-    } else if (added.length) {
-        ingredientStatus.textContent = `Added: ${added.join(', ')}.${duplicates ? ' Already selected ingredients were skipped.' : ''}`;
-    } else if (duplicates) {
-        ingredientStatus.dataset.state = 'notice';
-        ingredientStatus.textContent = 'Those ingredients are already selected.';
-    } else if (!keepUnfinished) {
-        ingredientStatus.textContent = 'Please enter an ingredient.';
-        ingredientStatus.dataset.state = 'error';
-        input.setAttribute('aria-invalid', 'true');
-    }
-    updateSuggestions();
-    return invalid.length === 0;
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    ingredientCommitPromise = Promise.resolve().then(async () => {
+        // Verify a repeated token once, and verify only on an add attempt, never per keystroke.
+        const checks = new Map();
+        for (const entry of entries) {
+            const key = ingredientKey(entry.value);
+            if (!checks.has(key)) checks.set(key, verifyIngredient(entry.value, controller.signal));
+        }
+        const outcomes = await Promise.all(entries.map(entry => checks.get(ingredientKey(entry.value))));
+        if (version !== ingredientValidationVersion || searchMode !== 'ingredients' || input.value !== draft) return false;
+
+        const added = [];
+        const failures = [];
+        let duplicates = 0;
+        entries.forEach((entry, index) => {
+            const outcome = outcomes[index];
+            if (outcome.state !== 'recognized') {
+                failures.push({ ...entry, ...outcome });
+                return;
+            }
+            if (addIngredient(entry.value) === 'added') added.push(ingredientNames.get(ingredientKey(entry.value)));
+            else duplicates++;
+        });
+        input.value = [...failures.map(entry => entry.value), ...(keepUnfinished ? [unfinished] : [])].join(',');
+        previousIngredientInput = input.value;
+        input.removeAttribute('aria-invalid');
+        ingredientStatus.dataset.state = '';
+        const requestFailed = failures.some(entry => entry.state === 'request-error');
+        const choiceIndex = failures.findIndex(entry => entry.state === 'choices');
+        if (choiceIndex >= 0) {
+            verificationSuggestionContext = {
+                draft: input.value, index: choiceIndex, names: failures[choiceIndex].names
+            };
+        }
+        if (requestFailed) {
+            ingredientStatus.dataset.state = 'error';
+            ingredientStatus.textContent = 'We couldn’t verify this ingredient. Check your connection and retry the ingredient check.';
+            ingredientVerifyRetry.hidden = false;
+        } else if (failures.length) {
+            ingredientStatus.dataset.state = choiceIndex >= 0 ? 'notice' : 'error';
+            ingredientStatus.textContent = choiceIndex >= 0
+                ? `No exact match for “${failures[choiceIndex].value}”. Choose a suggestion or edit your entry.`
+                : unrecognizedIngredientMessage;
+            input.setAttribute('aria-invalid', 'true');
+        } else if (added.length) {
+            ingredientStatus.textContent = `Added: ${added.join(', ')}.${duplicates ? ' Already selected ingredients were skipped.' : ''}`;
+        } else if (duplicates) {
+            ingredientStatus.dataset.state = 'notice';
+            ingredientStatus.textContent = 'Those ingredients are already selected.';
+        } else if (!keepUnfinished) {
+            ingredientStatus.textContent = 'Please enter an ingredient.';
+            ingredientStatus.dataset.state = 'error';
+            input.setAttribute('aria-invalid', 'true');
+        }
+        updateSuggestions();
+        return failures.length === 0;
+    }).finally(() => {
+        clearTimeout(timeout);
+        if (version === ingredientValidationVersion) {
+            ingredientVerificationController = null;
+            ingredientCommitPromise = null;
+            input.removeAttribute('aria-busy');
+        }
+    });
+    return ingredientCommitPromise;
 }
 
 input.addEventListener('keydown', (event) => {
@@ -271,25 +399,35 @@ input.addEventListener('keydown', (event) => {
             ? (event.key === 'ArrowDown' ? 0 : suggestedIngredients.length - 1)
             : (activeSuggestion + (event.key === 'ArrowDown' ? 1 : -1) + suggestedIngredients.length) % suggestedIngredients.length;
         activateSuggestion(next);
-    } else if (event.key === 'Enter' && activeSuggestion >= 0) {
+    } else if (event.key === 'Enter' && activeSuggestion >= 0 &&
+        activeSuggestionDraft === input.value && !ingredientSuggestions.hidden) {
         event.preventDefault();
         selectSuggestion(suggestedIngredients[activeSuggestion]);
     } else if (event.key === 'Enter' && input.value.trim()) {
         event.preventDefault();
+        // Plain Enter validates the typed name; local suggestions are not a whitelist.
         commitIngredients();
     }
 });
 input.addEventListener('input', (event) => {
     resultNavigation.cancelPending();
-    input.removeAttribute('aria-invalid');
+    const previous = previousIngredientInput;
+    previousIngredientInput = input.value;
+    invalidateIngredientValidation();
     if (searchMode !== 'ingredients') return;
-    ingredientStatus.dataset.state = '';
-    ingredientStatus.textContent = '';
-    if (!event.isComposing && input.value.includes(',')) commitIngredients(true);
+    // A retained invalid token may contain commas. Editing its unfinished tail
+    // must not revalidate that older token and immediately restore its error.
+    const newComma = event.data?.includes(',') || input.value.split(',').length > previous.split(',').length;
+    if (!event.isComposing && newComma) commitIngredients(true);
     if (!event.isComposing) updateSuggestions();
 });
+input.addEventListener('compositionstart', () => { compositionDraft = input.value; });
 input.addEventListener('compositionend', () => {
-    if (searchMode === 'ingredients' && input.value.includes(',')) commitIngredients(true);
+    invalidateIngredientValidation();
+    if (searchMode === 'ingredients' && input.value.split(',').length > compositionDraft.split(',').length) {
+        commitIngredients(true);
+    }
+    previousIngredientInput = input.value;
     updateSuggestions();
 });
 input.addEventListener('focus', updateSuggestions);
@@ -298,8 +436,13 @@ input.addEventListener('blur', closeSuggestions);
 form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (searchMode === 'ingredients') {
-        if (input.value.trim() && !commitIngredients()) {
+        const pendingCommit = input.value.trim() ? commitIngredients() : null;
+        const version = ingredientValidationVersion;
+        const committed = pendingCommit ? await pendingCommit : true;
+        if (version !== ingredientValidationVersion || searchMode !== 'ingredients') return;
+        if (!committed) {
             input.focus();
+            updateSuggestions();
             return;
         }
         closeSuggestions();
@@ -317,6 +460,12 @@ function cleanText(value) {
 
 function normalizeIngredient(value) {
     return cleanText(value).replace(/\s+/g, ' ').toLowerCase();
+}
+
+function ingredientKey(value) {
+    // Recognition is exact except for case and surrounding whitespace.
+    // Keep internal spacing and words intact; brands and juices are distinct names.
+    return cleanText(value).toLowerCase();
 }
 
 function compareRecipeIngredients(drink, selectedIngredients) {
@@ -482,6 +631,7 @@ async function findByIngredients() {
         if (drinks.some(drink => !drink || typeof drink !== 'object' || Array.isArray(drink))) {
             throw new Error('Unexpected recipe data');
         }
+        indexRecipeIngredients(drinks);
         const comparisons = drinks
             .map(drink => compareRecipeIngredients(drink, selectedIngredients))
             .sort((a, b) => a.missingCount - b.missingCount ||
@@ -629,6 +779,7 @@ async function searchByName() {
             setStatus(`No cocktails found for “${query}”. Try another name.`);
             return;
         }
+        indexRecipeIngredients(drinks);
         const fragment = document.createDocumentFragment();
         for (const drink of drinks) fragment.append(createRecipe(drink));
         results.replaceChildren(fragment);

@@ -5,12 +5,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cocktail Finder</title>
+    <meta name="cocktail-finder-build" content="ingredient-verification-2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=ingredient-verification-2">
     <script src="result-navigation.js" defer></script>
-    <script src="script.js" defer></script>
+    <script src="script.js?v=ingredient-verification-2" defer></script>
 </head>
 
 <body>
@@ -45,6 +46,7 @@
                         <button id="ingredient-retry" class="ingredient-retry" type="button" hidden>Retry ingredient list</button>
                         <ul id="ingredient-list" class="ingredient-list" aria-label="Added ingredients" role="list"></ul>
                         <p id="ingredient-status" class="hint" role="status" aria-live="polite" aria-atomic="true"></p>
+                        <button id="ingredient-verify-retry" class="ingredient-retry" type="button" hidden>Retry ingredient check</button>
                     </div>
                 </form>
             </div>

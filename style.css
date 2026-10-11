@@ -105,6 +105,7 @@ label { display: block; margin-bottom: 10px; color: var(--text-primary); font-si
 .ingredient-retry { margin-top: 8px; padding: 8px 14px; min-height: 44px; background: var(--surface-light); color: var(--accent-hover); border-color: var(--border); }
 .ingredient-retry:hover { background: var(--surface); }
 #ingredient-load-status[data-state='loading'] { color: var(--accent-hover); }
+#ingredient-status[data-state='loading'] { color: var(--accent-hover); }
 #ingredient-load-status[data-state='error'] { color: #eda18b; }
 input { flex: 1; width: 100%; min-width: 0; padding: 14px 16px; border: 1px solid var(--border); background: var(--background); color: var(--text-primary); font-size: .9rem; }
 input::placeholder { color: var(--text-secondary); opacity: 1; }
