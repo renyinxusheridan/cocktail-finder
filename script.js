@@ -44,6 +44,8 @@ let latestComparisonRequest = 0;
 
 const ingredientModeButton = document.querySelector('#mode-ingredients');
 const nameModeButton = document.querySelector('#mode-name');
+const heroEyebrow = document.querySelector('#hero-eyebrow');
+const heroDescription = document.querySelector('#hero-description');
 const searchLabel = document.querySelector('#search-label');
 const searchHint = document.querySelector('#search-hint');
 const ingredientControls = document.querySelector('#ingredient-controls');
@@ -76,7 +78,7 @@ function setSearchMode(mode) {
     input.value = inputDrafts[mode];
     previousIngredientInput = input.value;
     input.removeAttribute('aria-invalid');
-    input.placeholder = byIngredients ? 'Enter ingredients, separated by commas' : 'Search for a cocktail';
+    input.placeholder = byIngredients ? 'Try Gin, Lime, or Vodka' : 'Enter a cocktail name, e.g. Margarita';
     input.setAttribute('aria-describedby', byIngredients ? 'search-hint ingredient-load-status ingredient-status' : 'search-hint');
     for (const [attribute, value] of Object.entries({ role: 'combobox', 'aria-autocomplete': 'list', 'aria-controls': 'ingredient-suggestions', 'aria-expanded': 'false' })) {
         if (byIngredients) input.setAttribute(attribute, value);
@@ -85,15 +87,20 @@ function setSearchMode(mode) {
     searchLabel.textContent = byIngredients ? 'Your ingredients' : 'Cocktail name';
     searchHint.textContent = byIngredients
         ? 'Choose a suggestion, or press Enter or type a comma to add an ingredient. Use ↑/↓ to browse suggestions.'
-        : 'Try Margarita or Mojito.';
-    findCocktails.textContent = byIngredients ? 'Find Cocktails' : 'Search';
+        : 'Enter a cocktail name to find its recipe. Try Margarita or Mojito.';
+    heroEyebrow.textContent = byIngredients ? 'DISCOVER WHAT YOU CAN MAKE' : 'FIND A FAVORITE COCKTAIL';
+    heroDescription.textContent = byIngredients
+        ? 'Turn the ingredients you already have into your next drink.'
+        : 'Find a cocktail by name and explore its recipe.';
+    findCocktails.textContent = byIngredients ? 'Find Cocktails' : 'Search Cocktails';
     findCocktails.disabled = false;
-    ingredientModeButton.setAttribute('aria-pressed', String(byIngredients));
-    nameModeButton.setAttribute('aria-pressed', String(!byIngredients));
+    ingredientModeButton.hidden = byIngredients;
+    nameModeButton.hidden = !byIngredients;
     ingredientControls.hidden = !byIngredients;
     ingredientOutput.hidden = !byIngredients;
     nameOutput.hidden = byIngredients;
     resultNavigation.refresh(mode);
+    input.focus({ preventScroll: true });
 }
 
 ingredientModeButton.addEventListener('click', () => setSearchMode('ingredients'));
