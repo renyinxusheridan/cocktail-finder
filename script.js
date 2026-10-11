@@ -675,7 +675,8 @@ function renderComparisonGroups(comparisons) {
             const closestButton = makeElement('button', 'View closest matches', 'closest-matches-button');
             closestButton.type = 'button';
             closestButton.addEventListener('click', () => {
-                resultNavigation.navigateToSection(document.querySelector(`#comparison-group-${closestGroupIndex}`));
+                const targetSection = document.getElementById(`comparison-group-${closestGroupIndex}`);
+                resultNavigation.navigateToSection(targetSection);
             });
             section.append(
                 makeElement('p', 'You can’t make any of these cocktails yet.', 'comparison-empty-message'),

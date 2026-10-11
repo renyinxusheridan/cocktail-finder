@@ -87,6 +87,17 @@ const resultNavigation = (() => {
         updateVisibility();
     }
 
+    function navigateToSection(element) {
+        // Shared by the side navigation and the closest-matches button.
+        cancelPending();
+        if (!isVisible(element)) return;
+        const heading = element.querySelector('h2, h3');
+        if (!isVisible(heading)) return;
+        focusContent(heading);
+        heading.scrollIntoView({ behavior: behavior(), block: 'start' });
+        setCurrent(element.id);
+    }
+
     function refresh(mode) {
         sectionObserver.disconnect();
         visibleSections.clear();
@@ -114,10 +125,7 @@ const resultNavigation = (() => {
             link.addEventListener('click', event => {
                 if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
                 event.preventDefault();
-                cancelPending();
-                const heading = element.querySelector('h2, h3');
-                focusContent(heading);
-                heading.scrollIntoView({ behavior: behavior(), block: 'start' });
+                navigateToSection(element);
             });
             item.append(link);
             links.append(item);
@@ -189,5 +197,5 @@ const resultNavigation = (() => {
 
     navigation.querySelector('.back-to-top').addEventListener('click', returnToTop);
     mobileTop.addEventListener('click', returnToTop);
-    return { reset, refresh, complete, cancelPending };
+    return { reset, refresh, complete, cancelPending, navigateToSection };
 })();
