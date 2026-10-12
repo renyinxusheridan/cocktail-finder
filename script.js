@@ -104,7 +104,7 @@ function setSearchMode(mode) {
         if (byIngredients) input.setAttribute(attribute, value);
         else input.removeAttribute(attribute);
     }
-    searchLabel.textContent = byIngredients ? 'Your ingredients' : 'Cocktail name';
+    searchLabel.textContent = byIngredients ? 'Enter ingredients you have at home' : 'Cocktail name';
     searchHint.textContent = byIngredients
         ? 'Choose a suggestion, or press Enter or type a comma to add an ingredient. Use ↑/↓ to browse suggestions.'
         : 'Enter a cocktail name to find its recipe. Try Margarita or Mojito.';
