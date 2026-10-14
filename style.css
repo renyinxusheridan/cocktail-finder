@@ -114,13 +114,15 @@ label { display: block; margin-bottom: 10px; color: var(--text-primary); font-si
 #ingredient-load-status[data-state='loading'] { color: var(--accent-hover); }
 #ingredient-status[data-state='loading'] { color: var(--accent-hover); }
 #ingredient-load-status[data-state='error'] { color: #eda18b; }
+#ingredient-load-status:empty { display: none; }
 input { flex: 1; width: 100%; min-width: 0; padding: 14px 16px; border: 1px solid var(--border); background: var(--background); color: var(--text-primary); font-size: .9rem; }
 input::placeholder { color: var(--text-secondary); opacity: 1; }
 input[aria-invalid='true'] { border-color: #eda18b; }
 #search-submit { flex-shrink: 0; min-width: 168px; }
 :focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 4px; }
 .hint { color: var(--text-secondary); font-size: .78rem; margin: 12px 0 0; }
-.ingredient-list { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 18px 0 0; }
+.selected-ingredients-label { margin: 18px 0 8px; color: var(--text-primary); font-size: .78rem; font-weight: 600; }
+.ingredient-list { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 0; }
 .ingredient-list:empty { display: none; }
 .ingredient-chip { display: flex; align-items: center; gap: 6px; max-width: 100%; padding-left: 12px; background: var(--surface-light); border: 1px solid var(--border); border-radius: 3px; font-size: .8rem; }
 .ingredient-chip span { min-width: 0; overflow-wrap: anywhere; }
@@ -174,8 +176,15 @@ input[aria-invalid='true'] { border-color: #eda18b; }
 .comparison-card ul { color: var(--text-secondary); font-size: .8rem; }
 .buy-next { margin-bottom: 40px; background: var(--surface); padding: 28px; border: 1px solid var(--border); border-radius: 5px; }
 .buy-next > h2 { margin: 0 0 12px; }
-.buy-next ul { margin: 20px 0 0; padding-left: 20px; color: var(--text-primary); font-size: .9rem; }
-.buy-next li + li { margin-top: 12px; }
+.buy-next-list { margin: 20px 0 0; padding-left: 20px; color: var(--text-primary); font-size: .9rem; }
+.buy-next-list > li + li { margin-top: 22px; }
+.purchase-summary { margin: 0; }
+.purchase-unlocks { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.purchase-card { display: flex; align-items: center; flex: 0 1 240px; width: 240px; max-width: 100%; min-width: 0; min-height: 60px; gap: 12px; padding: 8px; background: var(--surface-light); border-color: var(--border); color: var(--text-primary); text-align: left; font-size: .8rem; font-weight: 500; }
+.purchase-card:hover { background: var(--surface); border-color: var(--accent); }
+.purchase-card > .recipe-image, .purchase-card > .image-fallback { flex: 0 0 44px; width: 44px; height: 44px; aspect-ratio: 1; border-radius: 2px; }
+.purchase-card > .image-fallback { padding: 4px; font-size: .5rem; line-height: 1.25; }
+.purchase-card-name { min-width: 0; overflow-wrap: anywhere; }
 body.recipe-open { overflow: hidden; }
 #recipe-dialog { width: min(940px, calc(100% - 32px)); max-height: 90vh; max-height: 90dvh; margin: auto; padding: 0; border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); background: var(--surface); box-shadow: 0 24px 80px #0008; overflow: auto; }
 #recipe-dialog::backdrop { background: rgb(0 0 0 / 80%); }

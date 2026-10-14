@@ -11,6 +11,7 @@ let latestRequest = 0;
 
 const ingredientInput = input;
 const ingredientList = document.querySelector('#ingredient-list');
+const selectedIngredientsLabel = document.querySelector('#selected-ingredients-label');
 const ingredientMatchingHint = document.querySelector('#ingredient-matching-hint');
 const ingredientStatus = document.querySelector('#ingredient-status');
 const ingredientLoadStatus = document.querySelector('#ingredient-load-status');
@@ -190,7 +191,7 @@ async function loadIngredientNames() {
             indexIngredientNames(data.drinks.map(item => item.strIngredient1));
             ingredientLoadState = 'ready';
             ingredientLoadStatus.dataset.state = '';
-            ingredientLoadStatus.textContent = 'Ingredient suggestions ready. Other names are checked when you add them.';
+            ingredientLoadStatus.textContent = '';
             updateSuggestions();
         } catch (error) {
             ingredientLoadState = 'error';
@@ -353,7 +354,7 @@ function addIngredient(value) {
     removeButton.addEventListener('click', () => {
         invalidateIngredientValidation();
         addedIngredients.delete(key);
-        updateIngredientMatchingHint();
+        updateIngredientSelectionLabels();
         resetComparison();
         chip.remove();
         ingredientStatus.dataset.state = '';
@@ -364,11 +365,12 @@ function addIngredient(value) {
     });
     chip.append(makeElement('span', ingredient), removeButton);
     ingredientList.append(chip);
-    updateIngredientMatchingHint();
+    updateIngredientSelectionLabels();
     return 'added';
 }
 
-function updateIngredientMatchingHint() {
+function updateIngredientSelectionLabels() {
+    selectedIngredientsLabel.hidden = addedIngredients.size === 0;
     ingredientMatchingHint.hidden = ![...addedIngredients].some(ingredient =>
         normalizeIngredient(ingredient) === 'absolut vodka');
 }
@@ -697,14 +699,20 @@ function createComparisonCard(drink) {
 }
 
 function createBuyingRecommendations(oneIngredientAway) {
-    const unlockCounts = new Map();
+    const unlockedRecipesByIngredient = new Map();
     for (const drink of oneIngredientAway) {
         const ingredient = drink.missingIngredients[0];
-        unlockCounts.set(ingredient, (unlockCounts.get(ingredient) || 0) + 1);
+        const id = cleanText(drink.idDrink);
+        if (!ingredient || !id) continue;
+        if (!unlockedRecipesByIngredient.has(ingredient)) {
+            unlockedRecipesByIngredient.set(ingredient, new Map());
+        }
+        const recipesById = unlockedRecipesByIngredient.get(ingredient);
+        if (!recipesById.has(id)) recipesById.set(id, drink);
     }
-    const recommendations = [...unlockCounts.entries()]
-        .sort(([ingredientA, countA], [ingredientB, countB]) =>
-            countB - countA || ingredientA.localeCompare(ingredientB))
+    const recommendations = [...unlockedRecipesByIngredient.entries()]
+        .sort(([ingredientA, recipesA], [ingredientB, recipesB]) =>
+            recipesB.size - recipesA.size || ingredientA.localeCompare(ingredientB))
         .slice(0, 3);
 
     const section = makeElement('section', '', 'buy-next');
@@ -717,16 +725,41 @@ function createBuyingRecommendations(oneIngredientAway) {
         makeElement('p', 'Based on recipes retrieved through A–Z requests.', 'hint')
     );
     if (recommendations.length) {
-        const list = makeElement('ul');
-        for (const [ingredient, count] of recommendations) {
+        const list = makeElement('ul', '', 'buy-next-list');
+        for (const [ingredient, recipesById] of recommendations) {
+            const unlockedRecipes = [...recipesById.values()];
+            const count = unlockedRecipes.length;
             const name = ingredient.charAt(0).toUpperCase() + ingredient.slice(1);
-            list.append(makeElement('li', `${name} — unlocks ${count} ${count === 1 ? 'cocktail' : 'cocktails'}`));
+            const item = makeElement('li');
+            const cards = makeElement('div', '', 'purchase-unlocks');
+            cards.setAttribute('role', 'group');
+            cards.setAttribute('aria-label', `Cocktails unlocked by ${name}`);
+            for (const drink of unlockedRecipes) cards.append(createPurchaseRecipeCard(drink));
+            item.append(makeElement('p', `${name} — unlocks ${count} ${count === 1 ? 'cocktail' : 'cocktails'}`, 'purchase-summary'), cards);
+            list.append(item);
         }
         section.append(list);
     } else {
         section.append(makeElement('p', 'No single ingredient can unlock another cocktail among the retrieved recipes.', 'hint'));
     }
     return section;
+}
+
+function createPurchaseRecipeCard(drink) {
+    const name = cleanText(drink.strDrink) || 'Unnamed cocktail';
+    const card = makeElement('button', '', 'purchase-card');
+    card.type = 'button';
+    card.dataset.recipeId = cleanText(drink.idDrink);
+    card.setAttribute('aria-label', name);
+    card.setAttribute('aria-haspopup', 'dialog');
+    card.setAttribute('aria-controls', 'recipe-dialog');
+    const thumbnail = createDrinkImage(drink);
+    // The adjacent name labels the button; avoid announcing it twice via the image.
+    if (thumbnail.tagName === 'IMG') thumbnail.alt = '';
+    else thumbnail.setAttribute('aria-hidden', 'true');
+    card.append(thumbnail, makeElement('span', name, 'purchase-card-name'));
+    card.addEventListener('click', () => openRecipe(drink));
+    return card;
 }
 
 function renderComparisonGroups(comparisons) {
